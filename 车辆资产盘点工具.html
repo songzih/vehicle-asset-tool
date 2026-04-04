@@ -1,0 +1,3271 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>车辆资产盘点照片归档工具 v2.4</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <style>
+    :root {
+      --primary: #1a56db;
+      --primary-dark: #1347c8;
+      --primary-light: #e8f0fe;
+      --success: #0d9488;
+      --success-light: #d1fae5;
+      --warning: #d97706;
+      --warning-light: #fef3c7;
+      --danger: #dc2626;
+      --danger-light: #fee2e2;
+      --gray-50: #f9fafb;
+      --gray-100: #f3f4f6;
+      --gray-200: #e5e7eb;
+      --gray-300: #d1d5db;
+      --gray-400: #9ca3af;
+      --gray-500: #6b7280;
+      --gray-600: #4b5563;
+      --gray-700: #374151;
+      --gray-800: #1f2937;
+      --gray-900: #111827;
+      --radius: 12px;
+      --shadow: 0 4px 24px rgba(0,0,0,0.08);
+      --shadow-lg: 0 8px 40px rgba(0,0,0,0.12);
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Microsoft YaHei', 'PingFang SC', sans-serif;
+      background: linear-gradient(135deg, #f0f4ff 0%, #e8f0fe 50%, #f0f9ff 100%);
+      min-height: 100vh;
+      color: var(--gray-800);
+    }
+
+    .app-header {
+      background: linear-gradient(135deg, #1a56db 0%, #1347c8 100%);
+      color: white;
+      padding: 20px 40px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      box-shadow: 0 4px 20px rgba(26, 86, 219, 0.3);
+    }
+
+    .app-header .icon {
+      width: 48px; height: 48px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 12px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 24px;
+    }
+
+    .app-header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+
+    .app-header p {
+      font-size: 13px;
+      opacity: 0.75;
+      margin-top: 2px;
+    }
+
+    .app-header .badge {
+      margin-left: auto;
+      background: rgba(255,255,255,0.2);
+      border: 1px solid rgba(255,255,255,0.3);
+      border-radius: 20px;
+      padding: 4px 14px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .container {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 32px 24px;
+    }
+
+    /* 步骤指引 */
+    .steps-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0;
+      margin-bottom: 32px;
+      background: white;
+      border-radius: var(--radius);
+      padding: 16px 24px;
+      box-shadow: var(--shadow);
+    }
+
+    .step {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 16px;
+      border-radius: 8px;
+      transition: all 0.3s;
+      flex: 1;
+      justify-content: center;
+    }
+
+    .step.active { background: var(--primary-light); }
+    .step.done { background: var(--success-light); }
+
+    .step-num {
+      width: 28px; height: 28px;
+      border-radius: 50%;
+      background: var(--gray-200);
+      color: var(--gray-500);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+      transition: all 0.3s;
+    }
+
+    .step.active .step-num {
+      background: var(--primary);
+      color: white;
+    }
+
+    .step.done .step-num {
+      background: var(--success);
+      color: white;
+    }
+
+    .step-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--gray-500);
+    }
+
+    .step.active .step-label { color: var(--primary); }
+    .step.done .step-label { color: var(--success); }
+
+    .step-arrow {
+      color: var(--gray-300);
+      font-size: 18px;
+      margin: 0 4px;
+    }
+
+    /* 卡片 */
+    .card {
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      margin-bottom: 20px;
+    }
+
+    .card-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--gray-100);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .card-header h2 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--gray-800);
+    }
+
+    .card-header .card-icon {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+      background: var(--primary-light);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 16px;
+    }
+
+    .card-body { padding: 24px; }
+
+    /* 上传区 */
+    .upload-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+
+    .upload-slot {
+      border: 2px dashed var(--gray-300);
+      border-radius: var(--radius);
+      padding: 20px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.25s;
+      background: var(--gray-50);
+      position: relative;
+      min-height: 180px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+    }
+
+    .upload-slot:hover, .upload-slot.drag-over, .upload-slot.paste-focus {
+      border-color: var(--primary);
+      background: var(--primary-light);
+      transform: translateY(-2px);
+      box-shadow: 0 8px 24px rgba(26, 86, 219, 0.12);
+    }
+
+    /* 粘贴焦点：更明显的蓝色光圈 */
+    .upload-slot.paste-focus {
+      border-color: var(--primary) !important;
+      box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.25), 0 8px 24px rgba(26, 86, 219, 0.12) !important;
+    }
+
+    /* Ctrl+V 提示标签 */
+    .paste-badge {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: var(--primary);
+      color: white;
+      font-size: 10px;
+      font-weight: 700;
+      border-radius: 6px;
+      padding: 2px 7px;
+      letter-spacing: 0.5px;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .upload-slot.paste-focus .paste-badge,
+    .upload-slot:hover .paste-badge {
+      opacity: 1;
+    }
+
+    .upload-slot.has-file {
+      border-color: var(--success);
+      border-style: solid;
+      background: var(--success-light);
+    }
+
+    .upload-slot .slot-icon {
+      font-size: 32px;
+      opacity: 0.5;
+    }
+
+    .upload-slot.has-file .slot-icon { opacity: 1; }
+
+    .upload-slot .slot-type {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+    }
+
+    .upload-slot .slot-hint {
+      font-size: 11px;
+      color: var(--gray-400);
+    }
+
+    .upload-slot .slot-filename {
+      font-size: 11px;
+      color: var(--success);
+      font-weight: 500;
+      word-break: break-all;
+      padding: 0 4px;
+    }
+
+    .upload-slot .preview-img {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 8px;
+      display: none;
+    }
+
+    .upload-slot.has-file .preview-img { display: block; }
+    .upload-slot.has-file .slot-icon { display: none; }
+    .upload-slot.has-file .slot-hint { display: none; }
+
+    /* 拖拽样式 */
+    .upload-slot.dragging {
+      opacity: 0.5;
+      transform: scale(0.95);
+    }
+
+    .upload-slot .remove-btn {
+      position: absolute;
+      top: 8px; right: 8px;
+      width: 22px; height: 22px;
+      background: var(--danger);
+      color: white;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      font-size: 12px;
+      font-weight: bold;
+      line-height: 1;
+    }
+
+    .upload-slot.has-file .remove-btn { display: flex; }
+
+    input[type="file"] { display: none; }
+
+    /* OCR区 */
+    .ocr-section {
+      display: flex;
+      align-items: stretch;
+      gap: 16px;
+    }
+
+    .ocr-result-box {
+      flex: 1;
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .ocr-result-box .label {
+      font-size: 12px;
+      color: var(--gray-500);
+      margin-bottom: 8px;
+      font-weight: 500;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .ocr-raw-text {
+      font-size: 13px;
+      color: var(--gray-700);
+      min-height: 40px;
+      line-height: 1.6;
+      word-break: break-all;
+    }
+
+    .vin-highlight {
+      background: linear-gradient(135deg, #fef9c3, #fef08a);
+      border: 1px solid #fbbf24;
+      border-radius: 6px;
+      padding: 2px 8px;
+      font-weight: 700;
+      color: var(--gray-800);
+      font-size: 14px;
+      letter-spacing: 1px;
+    }
+
+    .vin-input-section {
+      flex: 1;
+    }
+
+    .vin-input-label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .vin-input {
+      width: 100%;
+      padding: 12px 16px;
+      border: 2px solid var(--gray-200);
+      border-radius: 10px;
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--gray-900);
+      text-transform: uppercase;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      font-family: 'Consolas', 'Courier New', monospace;
+    }
+
+    .vin-input:focus {
+      outline: none;
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(26, 86, 219, 0.1);
+    }
+
+    .vin-input.valid { border-color: var(--success); }
+    .vin-input.invalid { border-color: var(--danger); }
+
+    .vin-hint {
+      margin-top: 8px;
+      font-size: 12px;
+      color: var(--gray-400);
+    }
+
+    .vin-hint span.ok { color: var(--success); }
+    .vin-hint span.err { color: var(--danger); }
+
+    /* OCR进度 */
+    .ocr-progress {
+      margin-top: 12px;
+      display: none;
+    }
+
+    .ocr-progress.show { display: block; }
+
+    .progress-bar-wrap {
+      background: var(--gray-200);
+      border-radius: 999px;
+      height: 6px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--primary), #6366f1);
+      border-radius: 999px;
+      transition: width 0.3s;
+    }
+
+    .progress-label {
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+
+    /* 操作按钮 */
+    .action-row {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 12px 28px;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      letter-spacing: 0.3px;
+    }
+
+    .btn:active { transform: scale(0.98); }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+      color: white;
+      box-shadow: 0 4px 16px rgba(26, 86, 219, 0.35);
+    }
+
+    .btn-primary:hover {
+      box-shadow: 0 6px 20px rgba(26, 86, 219, 0.45);
+      transform: translateY(-1px);
+    }
+
+    .btn-primary:disabled {
+      background: var(--gray-300);
+      color: var(--gray-500);
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .btn-ghost {
+      background: white;
+      color: var(--gray-600);
+      border: 1.5px solid var(--gray-200);
+    }
+
+    .btn-ghost:hover {
+      background: var(--gray-50);
+      border-color: var(--gray-300);
+    }
+
+    .btn-ocr {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: white;
+      box-shadow: 0 4px 16px rgba(124, 58, 237, 0.3);
+      padding: 10px 20px;
+      font-size: 13px;
+    }
+
+    .btn-ocr:hover {
+      box-shadow: 0 6px 20px rgba(124, 58, 237, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-ocr:disabled {
+      background: var(--gray-300);
+      color: var(--gray-400);
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* 状态提示 */
+    /* ===== ZIP 批次面板 ===== */
+    .btn-zip {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: white;
+      padding: 9px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      border-radius: 10px;
+      box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+      transition: all 0.2s;
+      cursor: pointer;
+    }
+
+    .btn-zip:hover {
+      box-shadow: 0 6px 18px rgba(124, 58, 237, 0.42);
+      transform: translateY(-1px);
+    }
+
+    /* ZIP 面板 */
+    .zip-panel {
+      border: 2px dashed #c4b5fd;
+      border-radius: 14px;
+      padding: 20px;
+      background: #faf5ff;
+      display: none;
+    }
+
+    .zip-panel.visible { display: block; }
+
+    .zip-panel-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 16px;
+      flex-wrap: wrap;
+    }
+
+    .zip-panel-header h3 {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+
+    .zip-badge {
+      background: #7c3aed;
+      color: white;
+      font-size: 12px;
+      font-weight: 700;
+      border-radius: 99px;
+      padding: 2px 10px;
+    }
+
+    .zip-progress-bar {
+      height: 4px;
+      background: var(--gray-200);
+      border-radius: 99px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+
+    .zip-progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #7c3aed, #a855f7);
+      border-radius: 99px;
+      transition: width 0.3s ease;
+    }
+
+    /* 批次卡片 */
+    .batch-queue {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      max-height: 600px;
+      overflow-y: auto;
+    }
+
+    .batch-card {
+      background: white;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 14px;
+      padding: 16px;
+      transition: all 0.2s;
+    }
+
+    .batch-card.current {
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+    }
+
+    .batch-card.done {
+      opacity: 0.55;
+      border-color: #6ee7b7;
+    }
+
+    .batch-card-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 12px;
+      flex-wrap: wrap;
+    }
+
+    .batch-folder-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: var(--gray-800);
+    }
+
+    .batch-index {
+      font-size: 12px;
+      color: white;
+      background: #7c3aed;
+      border-radius: 99px;
+      padding: 2px 10px;
+      font-weight: 600;
+    }
+
+    .batch-card.current .batch-index {
+      background: var(--primary);
+    }
+
+    .batch-card.done .batch-index {
+      background: var(--success);
+    }
+
+    .batch-slots {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
+      margin-bottom: 12px;
+    }
+
+    .batch-slot {
+      border: 2px dashed var(--gray-200);
+      border-radius: 10px;
+      padding: 8px;
+      background: var(--gray-50);
+      text-align: center;
+      transition: all 0.2s;
+      cursor: grab;
+      position: relative;
+    }
+
+    .batch-slot:hover {
+      border-color: #7c3aed;
+      background: #faf5ff;
+    }
+
+    .batch-slot.dragging {
+      opacity: 0.4;
+      transform: scale(0.95);
+    }
+
+    .batch-slot.drag-over {
+      border-color: #7c3aed;
+      background: #ede9fe;
+      transform: scale(1.03);
+    }
+
+    .batch-slot-label {
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--gray-400);
+      margin-bottom: 4px;
+    }
+
+    .batch-slot-thumb {
+      width: 100%;
+      aspect-ratio: 4/3;
+      object-fit: cover;
+      border-radius: 6px;
+      margin-bottom: 4px;
+    }
+
+    .batch-slot-name {
+      font-size: 11px;
+      color: var(--gray-500);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .batch-slot-drag-handle {
+      position: absolute;
+      top: 4px;
+      left: 4px;
+      font-size: 12px;
+      opacity: 0.4;
+      cursor: grab;
+    }
+
+    .batch-card-footer {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .batch-vin-input {
+      flex: 1;
+      min-width: 140px;
+      padding: 8px 12px;
+      border: 1.5px solid var(--gray-200);
+      border-radius: 8px;
+      font-size: 14px;
+      font-family: inherit;
+      color: var(--gray-800);
+    }
+
+    .batch-vin-input:focus {
+      outline: none;
+      border-color: #7c3aed;
+      box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+    }
+
+    .btn-batch-archive {
+      background: linear-gradient(135deg, #7c3aed, #6d28d9);
+      color: white;
+      padding: 8px 18px;
+      border-radius: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+    }
+
+    .btn-batch-archive:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 6px 16px rgba(124, 58, 237, 0.35);
+    }
+
+    .btn-batch-archive:disabled {
+      background: var(--gray-300);
+      box-shadow: none;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .batch-queue-counter {
+      font-size: 13px;
+      color: var(--gray-500);
+      text-align: center;
+      margin-bottom: 8px;
+    }
+
+    .zip-done-all {
+      text-align: center;
+      padding: 24px;
+      color: var(--success);
+      font-size: 15px;
+      font-weight: 600;
+    }
+
+    .zip-done-all button {
+      margin-top: 12px;
+      background: var(--success);
+      color: white;
+      border: none;
+      padding: 10px 24px;
+      border-radius: 10px;
+      font-size: 14px;
+      cursor: pointer;
+    }
+
+    .toast-container {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 9999;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      pointer-events: none;
+    }
+
+    .toast {
+      background: white;
+      border-radius: 12px;
+      padding: 14px 18px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.15);
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      min-width: 300px;
+      max-width: 400px;
+      animation: slideIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+      pointer-events: all;
+      border-left: 4px solid var(--gray-300);
+    }
+
+    .toast.success { border-left-color: var(--success); }
+    .toast.error { border-left-color: var(--danger); }
+    .toast.warning { border-left-color: var(--warning); }
+    .toast.info { border-left-color: var(--primary); }
+
+    .toast-icon { font-size: 18px; flex-shrink: 0; margin-top: 1px; }
+    .toast-body {}
+    .toast-title { font-size: 14px; font-weight: 600; color: var(--gray-800); }
+    .toast-msg { font-size: 12px; color: var(--gray-500); margin-top: 3px; line-height: 1.5; }
+
+    @keyframes slideIn {
+      from { transform: translateX(100px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+
+    /* 归档记录 */
+    .history-list {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .history-item {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      animation: fadeIn 0.3s ease;
+    }
+
+    .history-item .hi-vin {
+      font-family: 'Consolas', monospace;
+      font-weight: 700;
+      font-size: 15px;
+      color: var(--gray-800);
+      flex: 1;
+      letter-spacing: 1px;
+    }
+
+    .history-item .hi-time {
+      font-size: 12px;
+      color: var(--gray-400);
+    }
+
+    .hi-status {
+      display: flex;
+      gap: 6px;
+    }
+
+    .hi-badge {
+      font-size: 11px;
+      padding: 3px 8px;
+      border-radius: 20px;
+      font-weight: 500;
+    }
+
+    .hi-badge.ok {
+      background: var(--success-light);
+      color: var(--success);
+    }
+
+    .hi-badge.err {
+      background: var(--danger-light);
+      color: var(--danger);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* 信息栏 */
+    .info-banner {
+      background: linear-gradient(135deg, #eff6ff, #dbeafe);
+      border: 1px solid #bfdbfe;
+      border-radius: var(--radius);
+      padding: 14px 20px;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      margin-bottom: 20px;
+      font-size: 13px;
+      color: #1e40af;
+      line-height: 1.6;
+    }
+
+    .info-banner .info-icon { font-size: 18px; flex-shrink: 0; }
+
+    /* 文件夹状态 */
+    .folder-status-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      margin-top: 4px;
+    }
+
+    .folder-item {
+      background: var(--gray-50);
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 14px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s;
+    }
+
+    .folder-item.ready {
+      background: var(--success-light);
+      border-color: #6ee7b7;
+    }
+
+    .folder-item.pending {
+      background: var(--warning-light);
+      border-color: #fcd34d;
+    }
+
+    .folder-item .fi-icon { font-size: 22px; }
+    .folder-item .fi-name { font-size: 13px; font-weight: 600; color: var(--gray-700); }
+    .folder-item .fi-status { font-size: 11px; color: var(--gray-400); margin-top: 2px; }
+    .folder-item.ready .fi-status { color: var(--success); }
+
+    /* 响应式 */
+    @media (max-width: 720px) {
+      .upload-grid { grid-template-columns: 1fr; }
+      .ocr-section { flex-direction: column; }
+      .folder-status-grid { grid-template-columns: 1fr; }
+      .steps-bar { flex-wrap: wrap; }
+    }
+
+    /* 遮罩 */
+    .overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 100;
+      display: none;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .overlay.show { display: flex; }
+
+    .overlay-box {
+      background: white;
+      border-radius: 16px;
+      padding: 32px;
+      text-align: center;
+      max-width: 360px;
+      box-shadow: var(--shadow-lg);
+    }
+
+    .overlay-box .ov-icon { font-size: 48px; margin-bottom: 16px; }
+    .overlay-box h3 { font-size: 18px; font-weight: 700; color: var(--gray-800); margin-bottom: 8px; }
+    .overlay-box p { font-size: 14px; color: var(--gray-500); line-height: 1.6; }
+    .overlay-spinner {
+      width: 48px; height: 48px;
+      border: 4px solid var(--gray-200);
+      border-top-color: var(--primary);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .section-divider {
+      height: 1px;
+      background: var(--gray-100);
+      margin: 24px 0;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 32px;
+      color: var(--gray-400);
+      font-size: 14px;
+    }
+
+    .empty-state .es-icon { font-size: 32px; margin-bottom: 8px; }
+
+    .counter-badge {
+      background: var(--primary);
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      border-radius: 99px;
+      padding: 2px 8px;
+      margin-left: auto;
+    }
+
+    /* 归档目录设置 */
+    .dir-setup-row {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+    }
+
+    .dir-display {
+      flex: 1;
+      min-width: 0;
+      background: var(--gray-50);
+      border: 1.5px solid var(--gray-200);
+      border-radius: 10px;
+      padding: 10px 16px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .dir-display.set {
+      background: var(--success-light);
+      border-color: #6ee7b7;
+    }
+
+    .dir-display .dir-icon { font-size: 20px; flex-shrink: 0; }
+
+    .dir-display .dir-text {
+      min-width: 0;
+    }
+
+    .dir-display .dir-label {
+      font-size: 11px;
+      color: var(--gray-400);
+      font-weight: 500;
+    }
+
+    .dir-display.set .dir-label { color: var(--success); }
+
+    .dir-display .dir-path {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .dir-display.set .dir-path { color: var(--gray-900); }
+
+    .btn-select-dir {
+      background: linear-gradient(135deg, #0891b2, #0e7490);
+      color: white;
+      box-shadow: 0 4px 14px rgba(8, 145, 178, 0.3);
+      padding: 11px 22px;
+      font-size: 14px;
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+
+    .btn-select-dir:hover {
+      box-shadow: 0 6px 18px rgba(8, 145, 178, 0.42);
+      transform: translateY(-1px);
+    }
+
+    .dir-sub-preview {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+      flex-wrap: wrap;
+    }
+
+    .dir-sub-chip {
+      background: white;
+      border: 1px solid var(--gray-200);
+      border-radius: 20px;
+      padding: 4px 12px;
+      font-size: 12px;
+      color: var(--gray-500);
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dir-sub-chip.ok {
+      background: var(--success-light);
+      border-color: #a7f3d0;
+      color: var(--success);
+    }
+
+    .dir-not-set-hint {
+      font-size: 13px;
+      color: var(--warning);
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- Header -->
+<div class="app-header">
+  <div class="icon">🚗</div>
+  <div>
+    <h1>车辆资产盘点照片归档工具</h1>
+    <p>自动识别车架号 · 智能分类归档 · 零门槛操作</p>
+  </div>
+  <div class="badge">v2.4 Windows版</div>
+</div>
+
+<!-- Toast容器 -->
+<div class="toast-container" id="toastContainer"></div>
+
+<!-- 处理遮罩 -->
+<div class="overlay" id="overlay">
+  <div class="overlay-box">
+    <div class="overlay-spinner"></div>
+    <h3 id="overlayTitle">正在处理...</h3>
+    <p id="overlayMsg">请稍候，正在归档照片文件</p>
+  </div>
+</div>
+
+<div class="container">
+
+  <!-- 步骤条 -->
+  <div class="steps-bar">
+    <div class="step active" id="step1">
+      <div class="step-num">1</div>
+      <div class="step-label">上传照片</div>
+    </div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="step2">
+      <div class="step-num">2</div>
+      <div class="step-label">识别车架号</div>
+    </div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="step3">
+      <div class="step-num">3</div>
+      <div class="step-label">确认归档</div>
+    </div>
+    <div class="step-arrow">›</div>
+    <div class="step" id="step4">
+      <div class="step-num">4</div>
+      <div class="step-label">完成</div>
+    </div>
+  </div>
+
+  <!-- 归档目录设置 ★ 新增 -->
+  <div class="card" id="dirSetupCard">
+    <div class="card-header">
+      <div class="card-icon" style="background:#e0f2fe;">📂</div>
+      <h2>归档根目录设置</h2>
+      <span id="dirSetBadge" style="margin-left:auto;font-size:12px;color:var(--gray-400)">未设置</span>
+    </div>
+    <div class="card-body">
+      <div class="dir-setup-row">
+        <div class="dir-display" id="dirDisplay">
+          <span class="dir-icon">🖥️</span>
+          <div class="dir-text">
+            <div class="dir-label">归档根目录</div>
+            <div class="dir-path" id="dirPath">尚未选择，点击右侧按钮选择一次即可</div>
+          </div>
+        </div>
+        <button class="btn btn-select-dir" onclick="selectRootDir()">
+          📁 选择归档目录
+        </button>
+      </div>
+
+      <div id="dirSubPreview" class="dir-sub-preview" style="display:none">
+        <div class="dir-sub-chip" id="subChip0">📁 车架号</div>
+        <div class="dir-sub-chip" id="subChip1">📁 车牌号</div>
+        <div class="dir-sub-chip" id="subChip2">📁 车身侧面</div>
+        <span style="font-size:12px;color:var(--gray-400);align-self:center;">（归档时自动创建）</span>
+      </div>
+
+      <div class="dir-not-set-hint" id="dirNotSetHint">
+        ⚠️ 请先选择归档根目录（通常选择您的桌面），之后归档时无需再次选择
+      </div>
+    </div>
+  </div>
+
+  <!-- 车辆信息库管理 -->
+  <div class="card" id="vehicleLibCard">
+    <div class="card-header">
+      <div class="card-icon" style="background:#fef3c7;">🚗</div>
+      <h2>车辆信息库</h2>
+      <button class="btn btn-ghost" onclick="toggleVehicleLib()" style="margin-left:auto;font-size:12px;">
+        <span id="vehicleLibToggleText">展开</span>
+      </button>
+    </div>
+    <div class="card-body" id="vehicleLibBody" style="display:none;">
+      <div style="margin-bottom:16px;">
+        <p style="font-size:13px;color:var(--gray-600);margin-bottom:12px;">
+          📋 在此添加车辆信息库（车牌号 ↔ 车架号对应表），批量上传时可自动匹配车架号
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;">
+          <button class="btn btn-zip" onclick="importVehicleLib()" style="background:#059669;">
+            📥 导入信息库
+          </button>
+          <button class="btn btn-ghost" onclick="exportVehicleLib()">
+            📤 导出信息库
+          </button>
+          <button class="btn btn-ghost" onclick="clearVehicleLib()" style="color:var(--danger);">
+            🗑️ 清空
+          </button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+          <input type="text" id="newPlateNum" placeholder="车牌号（如：京A12345）" 
+                 style="flex:1;min-width:150px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;">
+          <input type="text" id="newVinNum" placeholder="车架号（17位）" 
+                 style="flex:1;min-width:200px;padding:8px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:13px;">
+          <button class="btn btn-primary" onclick="addVehicleEntry()" style="white-space:nowrap;">
+            ➕ 添加
+          </button>
+        </div>
+      </div>
+      <div id="vehicleLibCount" style="font-size:12px;color:var(--gray-500);margin-bottom:8px;">
+        共 0 条记录
+      </div>
+      <div id="vehicleLibList" style="max-height:300px;overflow-y:auto;border:1px solid var(--gray-200);border-radius:8px;">
+        <div style="padding:16px;text-align:center;color:var(--gray-400);font-size:13px;">
+          暂无记录，请添加或导入车辆信息
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 提示说明 -->
+  <div class="info-banner">
+    <span class="info-icon">ℹ️</span>
+    <div>
+      <b>使用说明：</b>①先在上方选择归档根目录（只需设置一次），②上传每台车的 3 张照片（点击/拖拽/粘贴均可），③OCR识别车架号后确认，④一键完成重命名 + 归档。<b>批量模式：</b>①点击「📁 选择多个文件夹」可一次选择多个文件夹（按住 Ctrl 多选），每个文件夹含 3 张照片，②系统自动识别并填入槽位，③修正车架号后点击「🚀 一键归档全部」批量完成！<br>
+      <b>⚠️ 注意：</b>本工具需要 <b>Chrome / Edge 109+</b> 浏览器（File System Access API 支持）。首次选择目录时浏览器会弹出授权对话框，授权后当次标签页内无需重复操作。
+    </div>
+  </div>
+
+  <!-- 上传区 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">📷</div>
+      <h2>第一步：上传 3 张照片</h2>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:8px;">
+        <span style="font-size:12px;color:var(--gray-400)">或</span>
+        <button class="btn btn-zip" id="batchFolderBtn" onclick="selectBatchFolder()" style="background: linear-gradient(135deg, #059669, #047857);">
+          🗂️ 批量上传文件夹
+        </button>
+        <button class="btn btn-zip" id="zipUploadBtn" onclick="selectMultipleFolders()">
+          📁 选择多个文件夹
+        </button>
+        <button class="btn btn-ghost" id="batchArchiveAllBtn" style="display:none;" onclick="batchArchiveAll()">
+          🚀 一键归档全部
+        </button>
+      </div>
+    </div>
+    <div class="card-body">
+      <div class="upload-grid">
+        <!-- 车架号照片 -->
+        <div class="upload-slot" id="slot0" tabindex="0" draggable="true" onclick="triggerSelect(0)" onfocus="setPasteFocus(0)" onblur="clearPasteFocus(0)" ondragstart="handleDragStart(event,0)" ondrop="handleDrop(event,0)" ondragover="handleDragOver(event,0)" ondragleave="handleDragLeave(0)">
+          <button class="remove-btn" onclick="removeFile(event,0)">×</button>
+          <span class="paste-badge">Ctrl+V</span>
+          <img class="preview-img" id="preview0" alt="预览">
+          <div class="slot-icon">🔢</div>
+          <div class="slot-type">① 车架号照片</div>
+          <div class="slot-hint">点击选择 / 拖拽 / 粘贴</div>
+          <div class="slot-filename" id="name0"></div>
+        </div>
+        <!-- 车牌号照片 -->
+        <div class="upload-slot" id="slot1" tabindex="0" draggable="true" onclick="triggerSelect(1)" onfocus="setPasteFocus(1)" onblur="clearPasteFocus(1)" ondragstart="handleDragStart(event,1)" ondrop="handleDrop(event,1)" ondragover="handleDragOver(event,1)" ondragleave="handleDragLeave(1)">
+          <button class="remove-btn" onclick="removeFile(event,1)">×</button>
+          <span class="paste-badge">Ctrl+V</span>
+          <img class="preview-img" id="preview1" alt="预览">
+          <div class="slot-icon">🚘</div>
+          <div class="slot-type">② 车牌号照片</div>
+          <div class="slot-hint">点击选择 / 拖拽 / 粘贴</div>
+          <div class="slot-filename" id="name1"></div>
+        </div>
+        <!-- 车身侧面 -->
+        <div class="upload-slot" id="slot2" tabindex="0" draggable="true" onclick="triggerSelect(2)" onfocus="setPasteFocus(2)" onblur="clearPasteFocus(2)" ondragstart="handleDragStart(event,2)" ondrop="handleDrop(event,2)" ondragover="handleDragOver(event,2)" ondragleave="handleDragLeave(2)">
+          <button class="remove-btn" onclick="removeFile(event,2)">×</button>
+          <span class="paste-badge">Ctrl+V</span>
+          <img class="preview-img" id="preview2" alt="预览">
+          <div class="slot-icon">🚗</div>
+          <div class="slot-type">③ 车身侧面照片</div>
+          <div class="slot-hint">点击选择 / 拖拽 / 粘贴</div>
+          <div class="slot-filename" id="name2"></div>
+        </div>
+      </div>
+      <input type="file" id="fileInput0" accept="image/*" onchange="handleFileChange(event,0)">
+      <input type="file" id="fileInput1" accept="image/*" onchange="handleFileChange(event,1)">
+      <input type="file" id="fileInput2" accept="image/*" onchange="handleFileChange(event,2)">
+
+      <!-- ZIP 批次处理面板 -->
+      <div class="zip-panel" id="zipPanel">
+        <div class="zip-panel-header">
+          <span style="font-size:22px">📁</span>
+          <h3>批量文件夹归档</h3>
+          <span class="zip-badge" id="zipBatchCount">0 个文件夹</span>
+          <button style="margin-left:auto;background:none;border:none;cursor:pointer;font-size:16px;color:var(--gray-400)" onclick="closeZipPanel()">✕ 关闭</button>
+        </div>
+        <div class="zip-progress-bar" id="zipProgressBar" style="display:none">
+          <div class="zip-progress-fill" id="zipProgressFill" style="width:0%"></div>
+        </div>
+        <div id="zipParseStatus" style="font-size:13px;color:var(--gray-500);margin-bottom:12px"></div>
+        <div class="batch-queue" id="batchQueue"></div>
+        <div id="zipDoneAll" class="zip-done-all" style="display:none">
+          🎉 全部归档完成！<br>
+          <button onclick="resetZipPanel()">继续添加文件夹</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 识别区 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">🔍</div>
+      <h2>第二步：识别并确认车架号</h2>
+    </div>
+    <div class="card-body">
+      <div class="ocr-section">
+        <div class="ocr-result-box">
+          <div class="label">🤖 OCR 识别结果（原始文字）</div>
+          <div class="ocr-raw-text" id="ocrRawText">
+            <span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮...</span>
+          </div>
+          <div class="ocr-progress" id="ocrProgress">
+            <div class="progress-label" id="ocrProgressLabel">正在识别...</div>
+            <div class="progress-bar-wrap">
+              <div class="progress-bar-fill" id="ocrProgressBar" style="width:0%"></div>
+            </div>
+          </div>
+          <br>
+          <button class="btn btn-ocr" id="ocrBtn" onclick="runOCR()" disabled>
+            🔍 OCR 识别车架号
+          </button>
+        </div>
+
+        <div class="vin-input-section">
+          <div class="vin-input-label">
+            ✏️ 车架号（VIN码）—— 请确认或手动修改
+          </div>
+          <input
+            type="text"
+            class="vin-input"
+            id="vinInput"
+            placeholder="17位车架号（如：LSVWA3166F2345678）"
+            maxlength="20"
+            oninput="validateVin()"
+            onkeyup="validateVin()"
+          >
+          <div class="vin-hint" id="vinHint">车架号通常为 17 位字母+数字</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 归档目标文件夹状态 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">📂</div>
+      <h2>桌面归档文件夹状态</h2>
+    </div>
+    <div class="card-body">
+      <div class="folder-status-grid" id="folderStatusGrid">
+        <div class="folder-item pending" id="folderItem0">
+          <span class="fi-icon">📁</span>
+          <div>
+            <div class="fi-name">车架号</div>
+            <div class="fi-status">未授权访问</div>
+          </div>
+        </div>
+        <div class="folder-item pending" id="folderItem1">
+          <span class="fi-icon">📁</span>
+          <div>
+            <div class="fi-name">车牌号</div>
+            <div class="fi-status">未授权访问</div>
+          </div>
+        </div>
+        <div class="folder-item pending" id="folderItem2">
+          <span class="fi-icon">📁</span>
+          <div>
+            <div class="fi-name">车身侧面</div>
+            <div class="fi-status">未授权访问</div>
+          </div>
+        </div>
+      </div>
+      <div style="margin-top:14px; font-size:12px; color:var(--gray-400)">
+        💡 已设置根目录后，归档时将自动在其中创建「车架号」「车牌号」「车身侧面」三个子文件夹
+      </div>
+    </div>
+  </div>
+
+  <!-- 操作区 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">⚡</div>
+      <h2>第三步：执行归档</h2>
+    </div>
+    <div class="card-body">
+      <div class="action-row">
+        <button class="btn btn-primary" id="archiveBtn" onclick="startArchive()" disabled>
+          ✅ 确认归档
+        </button>
+        <button class="btn btn-ghost" onclick="clearAll()">
+          🗑️ 清空重置
+        </button>
+        <div style="margin-left:auto; font-size:13px; color:var(--gray-500)" id="readyHint">
+          请完成照片上传并确认车架号
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 归档历史 -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">📋</div>
+      <h2>本次归档记录</h2>
+      <span class="counter-badge" id="historyCount">0</span>
+    </div>
+    <div class="card-body">
+      <div id="historyList">
+        <div class="empty-state">
+          <div class="es-icon">📭</div>
+          <div>暂无归档记录</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ===== 车辆信息库管理 =====
+const VEHICLE_LIB_KEY = 'vehicleLib';
+
+function getVehicleLib() {
+  try {
+    const data = localStorage.getItem(VEHICLE_LIB_KEY);
+    return data ? JSON.parse(data) : [];
+  } catch (e) {
+    console.warn('读取车辆信息库失败:', e);
+    return [];
+  }
+}
+
+function saveVehicleLib(lib) {
+  try {
+    localStorage.setItem(VEHICLE_LIB_KEY, JSON.stringify(lib));
+  } catch (e) {
+    console.warn('保存车辆信息库失败:', e);
+  }
+}
+
+// 根据车牌号查找车架号
+function findVinByPlate(plate) {
+  const lib = getVehicleLib();
+  const normalizedPlate = plate.trim().toUpperCase().replace(/[^\w\u4e00-\u9fa5]/g, '');
+  for (const entry of lib) {
+    const entryPlate = entry.plate.trim().toUpperCase().replace(/[^\w\u4e00-\u9fa5]/g, '');
+    if (entryPlate === normalizedPlate || normalizedPlate.includes(entryPlate) || entryPlate.includes(normalizedPlate)) {
+      return entry.vin;
+    }
+  }
+  return null;
+}
+
+function toggleVehicleLib() {
+  const body = document.getElementById('vehicleLibBody');
+  const text = document.getElementById('vehicleLibToggleText');
+  if (body.style.display === 'none') {
+    body.style.display = 'block';
+    text.textContent = '收起';
+    renderVehicleLib();
+  } else {
+    body.style.display = 'none';
+    text.textContent = '展开';
+  }
+}
+
+function renderVehicleLib() {
+  const lib = getVehicleLib();
+  const list = document.getElementById('vehicleLibList');
+  const count = document.getElementById('vehicleLibCount');
+  
+  count.textContent = `共 ${lib.length} 条记录`;
+  
+  if (lib.length === 0) {
+    list.innerHTML = '<div style="padding:16px;text-align:center;color:var(--gray-400);font-size:13px;">暂无记录，请添加或导入车辆信息</div>';
+    return;
+  }
+  
+  list.innerHTML = `
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="background:#f9fafb;border-bottom:1px solid var(--gray-200);">
+          <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--gray-600);">车牌号</th>
+          <th style="padding:10px 12px;text-align:left;font-weight:600;color:var(--gray-600);">车架号</th>
+          <th style="padding:10px 12px;text-align:right;font-weight:600;color:var(--gray-600);">操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${lib.map((entry, idx) => `
+          <tr style="border-bottom:1px solid var(--gray-100);">
+            <td style="padding:10px 12px;font-weight:500;">${escapeHtml(entry.plate)}</td>
+            <td style="padding:10px 12px;font-family:monospace;letter-spacing:1px;">${escapeHtml(entry.vin)}</td>
+            <td style="padding:10px 12px;text-align:right;">
+              <button onclick="deleteVehicleEntry(${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:12px;padding:4px 8px;border-radius:4px;" onmouseover="this.style.background='#fee2e2'" onmouseout="this.style.background='none'">删除</button>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function addVehicleEntry() {
+  const plateInput = document.getElementById('newPlateNum');
+  const vinInput = document.getElementById('newVinNum');
+  const plate = plateInput.value.trim();
+  const vin = vinInput.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  
+  if (!plate) {
+    showToast('请输入车牌号', '', 'warning');
+    plateInput.focus();
+    return;
+  }
+  
+  if (!vin || vin.length < 8) {
+    showToast('请输入有效的车架号（至少8位）', '', 'warning');
+    vinInput.focus();
+    return;
+  }
+  
+  const lib = getVehicleLib();
+  
+  // 检查是否已存在
+  const existingIdx = lib.findIndex(e => e.plate.toUpperCase() === plate.toUpperCase());
+  if (existingIdx >= 0) {
+    if (!confirm(`车牌「${plate}」已存在，是否更新车架号？`)) return;
+    lib[existingIdx].vin = vin;
+    showToast('已更新 ✅', `车牌「${plate}」的车架号已更新`, 'success');
+  } else {
+    lib.push({ plate, vin });
+    showToast('已添加 ✅', `车牌「${plate}」已添加到信息库`, 'success');
+  }
+  
+  saveVehicleLib(lib);
+  plateInput.value = '';
+  vinInput.value = '';
+  renderVehicleLib();
+  plateInput.focus();
+}
+
+function deleteVehicleEntry(idx) {
+  const lib = getVehicleLib();
+  const entry = lib[idx];
+  if (!confirm(`确定删除「${entry.plate}」（${entry.vin}）吗？`)) return;
+  
+  lib.splice(idx, 1);
+  saveVehicleLib(lib);
+  renderVehicleLib();
+  showToast('已删除', '', 'info');
+}
+
+function clearVehicleLib() {
+  const lib = getVehicleLib();
+  if (lib.length === 0) {
+    showToast('信息库已是空的', '', 'info');
+    return;
+  }
+  
+  if (!confirm(`确定清空全部 ${lib.length} 条记录吗？此操作不可恢复！`)) return;
+  
+  saveVehicleLib([]);
+  renderVehicleLib();
+  showToast('已清空', '', 'info');
+}
+
+async function importVehicleLib() {
+  try {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.json,.csv,.xlsx';
+    
+    input.onchange = async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      
+      const ext = file.name.split('.').pop().toLowerCase();
+      let newEntries = [];
+      
+      if (ext === 'json') {
+        try {
+          const text = await file.text();
+          const data = JSON.parse(text);
+          if (Array.isArray(data)) {
+            newEntries = data;
+          } else if (data.vehicles && Array.isArray(data.vehicles)) {
+            newEntries = data.vehicles;
+          }
+        } catch (e) {
+          showToast('JSON 格式错误', e.message, 'error');
+          return;
+        }
+      } else if (ext === 'csv') {
+        const text = await file.text();
+        const lines = text.split('\n').filter(l => l.trim());
+        if (lines.length < 2) {
+          showToast('CSV 文件内容为空或格式错误', '', 'warning');
+          return;
+        }
+        
+        // 尝试解析 CSV（支持多种格式）
+        for (let i = 1; i < lines.length; i++) {
+          const line = lines[i].trim();
+          if (!line) continue;
+          
+          // 尝试逗号分隔
+          let parts = line.split(',');
+          if (parts.length < 2) {
+            // 尝试制表符分隔
+            parts = line.split('\t');
+          }
+          
+          if (parts.length >= 2) {
+            const plate = parts[0].trim().replace(/["']/g, '');
+            const vin = parts[1].trim().replace(/["']/g, '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+            if (plate && vin && vin.length >= 8) {
+              newEntries.push({ plate, vin });
+            }
+          }
+        }
+      } else {
+        showToast('暂不支持此格式', '请使用 JSON 或 CSV 格式', 'warning');
+        return;
+      }
+      
+      if (newEntries.length === 0) {
+        showToast('未找到有效数据', '请确保文件包含车牌号和车架号', 'warning');
+        return;
+      }
+      
+      // 合并到现有库
+      const lib = getVehicleLib();
+      let addedCount = 0;
+      let updatedCount = 0;
+      
+      for (const entry of newEntries) {
+        const existingIdx = lib.findIndex(e => e.plate.toUpperCase() === entry.plate.toUpperCase());
+        if (existingIdx >= 0) {
+          lib[existingIdx].vin = entry.vin;
+          updatedCount++;
+        } else {
+          lib.push(entry);
+          addedCount++;
+        }
+      }
+      
+      saveVehicleLib(lib);
+      renderVehicleLib();
+      
+      let msg = `导入完成`;
+      if (addedCount > 0) msg += `，新增 ${addedCount} 条`;
+      if (updatedCount > 0) msg += `，更新 ${updatedCount} 条`;
+      showToast(msg, `共 ${lib.length} 条记录`, 'success');
+    };
+    
+    input.click();
+  } catch (e) {
+    showToast('导入失败', e.message, 'error');
+  }
+}
+
+function exportVehicleLib() {
+  const lib = getVehicleLib();
+  if (lib.length === 0) {
+    showToast('信息库为空', '请先添加数据后再导出', 'info');
+    return;
+  }
+  
+  // 导出为 CSV
+  const csvContent = '\uFEFF' + '车牌号,车架号\n' + lib.map(e => `"${e.plate}","${e.vin}"`).join('\n');
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `车辆信息库_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  
+  URL.revokeObjectURL(url);
+  showToast('导出成功 ✅', `已导出 ${lib.length} 条记录`, 'success');
+}
+
+// ===== IndexedDB 存储（保存目录句柄）=====
+const DB_NAME = 'VehicleArchiveDB';
+const DB_VERSION = 1;
+const STORE_NAME = 'handles';
+let _db = null;
+
+function openDB() {
+  return new Promise((resolve, reject) => {
+    if (_db) { resolve(_db); return; }
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onerror = () => reject(req.error);
+    req.onsuccess = () => { _db = req.result; resolve(_db); };
+    req.onupgradeneeded = (e) => {
+      const db = e.target.result;
+      if (!db.objectStoreNames.contains(STORE_NAME)) {
+        db.createObjectStore(STORE_NAME, { keyPath: 'key' });
+      }
+    };
+  });
+}
+
+async function saveDirHandle(key, handle) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    await tx.objectStore(STORE_NAME).put({ key, handle, name: handle?.name, savedAt: Date.now() });
+    await tx.complete;
+  } catch (e) {
+    console.warn('保存目录句柄失败:', e);
+  }
+}
+
+async function loadDirHandle(key) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction(STORE_NAME, 'readonly');
+    const result = await tx.objectStore(STORE_NAME).get(key);
+    if (result?.handle) {
+      // 验证句柄是否仍然有效
+      const permission = await result.handle.queryPermission({ mode: 'readwrite' });
+      if (permission === 'granted') {
+        return result.handle;
+      }
+    }
+  } catch (e) {
+    console.warn('加载目录句柄失败:', e);
+  }
+  return null;
+}
+
+// ===== 状态管理 =====
+const state = {
+  files: [null, null, null],
+  vin: '',
+  history: [],
+  rootDirHandle: null,       // 已选归档根目录（一次设置，反复使用）
+  subDirHandles: [null, null, null],
+  folderNames: ['车架号', '车牌号', '车身侧面'],
+};
+
+const SLOT_CONFIG = [
+  { icon: '🔢', label: '车架号照片' },
+  { icon: '🚘', label: '车牌号照片' },
+  { icon: '🚗', label: '车身侧面照片' },
+];
+
+// ===== 文件操作 =====
+function triggerSelect(idx) {
+  document.getElementById(`fileInput${idx}`).click();
+}
+
+function handleFileChange(event, idx) {
+  const files = Array.from(event.target.files).filter(f => f.type.startsWith('image/'));
+  
+  if (files.length === 0) return;
+  
+  // 按文件名排序
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  
+  // 批量填入槽位
+  const results = addMultipleFiles(files, idx);
+  
+  if (results.added === 0) {
+    showToast('槽位已满', '所有槽位均已填满', 'warning');
+  } else if (results.added < files.length) {
+    showToast(`已填入 ${results.added} 张`, `部分照片因槽位不足被忽略`, 'info');
+  }
+  
+  // 清空 input 以便下次选择相同文件
+  event.target.value = '';
+}
+
+// 主槽位拖拽状态
+let _mainDrag = { fromIdx: -1 };
+
+function handleDragStart(event, idx) {
+  _mainDrag.fromIdx = idx;
+  event.dataTransfer.effectAllowed = 'move';
+  // 延迟添加样式，等拖拽图像创建完成
+  setTimeout(() => {
+    const slot = document.getElementById(`slot${idx}`);
+    if (slot) slot.classList.add('dragging');
+  }, 0);
+}
+
+function handleDrop(event, idx) {
+  event.preventDefault();
+  const slot = document.getElementById(`slot${idx}`);
+  slot.classList.remove('drag-over', 'dragging');
+  
+  // 清除所有拖拽状态
+  document.querySelectorAll('.upload-slot').forEach(el => el.classList.remove('dragging'));
+  
+  // 检查是否是从其他槽位拖入的
+  const fromIdx = _mainDrag.fromIdx;
+  if (fromIdx >= 0 && fromIdx <= 2 && fromIdx !== idx) {
+    // 槽位间交换
+    const temp = state.files[idx];
+    state.files[idx] = state.files[fromIdx];
+    state.files[fromIdx] = temp;
+    
+    // 更新UI
+    updateSlotUI(idx);
+    updateSlotUI(fromIdx);
+    
+    updateButtons();
+    updateStep();
+    
+    showToast('已交换照片位置 ✅', '槽位已调整，请确认对应关系正确', 'success');
+    _mainDrag.fromIdx = -1;
+    return;
+  }
+  
+  // 外部文件拖入
+  const files = Array.from(event.dataTransfer.files).filter(f => f.type.startsWith('image/'));
+  
+  if (files.length === 0) {
+    showToast('格式错误', '请上传图片文件（JPG/PNG等）', 'error');
+    return;
+  }
+  
+  // 按文件名排序
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  
+  // 批量填入槽位
+  const results = addMultipleFiles(files, idx);
+  
+  if (results.added === 0) {
+    showToast('槽位已满', '所有槽位均已填满，请先删除再操作', 'warning');
+  } else if (results.added < files.length) {
+    showToast(`已填入 ${results.added} 张`, `部分照片因槽位不足被忽略`, 'info');
+  }
+}
+
+function handleDragOver(event, idx) {
+  event.preventDefault();
+  document.getElementById(`slot${idx}`).classList.add('drag-over');
+}
+
+function handleDragLeave(idx) {
+  document.getElementById(`slot${idx}`).classList.remove('drag-over');
+}
+
+function setFile(idx, file) {
+  state.files[idx] = file;
+  const slot = document.getElementById(`slot${idx}`);
+  const preview = document.getElementById(`preview${idx}`);
+  const nameEl = document.getElementById(`name${idx}`);
+
+  // 预览
+  const reader = new FileReader();
+  reader.onload = (e) => { preview.src = e.target.result; };
+  reader.readAsDataURL(file);
+
+  slot.classList.add('has-file');
+  nameEl.textContent = file.name.length > 22 ? file.name.substring(0, 20) + '...' : file.name;
+
+  updateButtons();
+  updateStep();
+}
+
+/**
+ * 更新单个槽位的UI（用于交换后刷新显示）
+ */
+function updateSlotUI(idx) {
+  const slot = document.getElementById(`slot${idx}`);
+  const preview = document.getElementById(`preview${idx}`);
+  const nameEl = document.getElementById(`name${idx}`);
+  const file = state.files[idx];
+  
+  if (file) {
+    // 有文件，更新预览
+    const reader = new FileReader();
+    reader.onload = (e) => { preview.src = e.target.result; };
+    reader.readAsDataURL(file);
+    slot.classList.add('has-file');
+    nameEl.textContent = file.name.length > 22 ? file.name.substring(0, 20) + '...' : file.name;
+  } else {
+    // 无文件，清空
+    preview.src = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 75"><rect fill="%23f3f4f6" width="100" height="75"/><text x="50" y="40" text-anchor="middle" fill="%239ca3af" font-size="12">+</text></svg>';
+    slot.classList.remove('has-file');
+    nameEl.textContent = SLOT_CONFIG[idx].label;
+  }
+}
+
+/**
+ * 批量添加多个文件到槽位
+ * @param {File[]} files - 文件数组（已排序）
+ * @param {number} startIdx - 起始槽位索引
+ * @returns {{added: number, slots: number[]}} - 添加结果
+ */
+function addMultipleFiles(files, startIdx = 0) {
+  const addedSlots = [];
+  let addedCount = 0;
+  
+  // 从起始槽位开始，按顺序填入
+  for (let i = 0; i < files.length; i++) {
+    const file = files[i];
+    const slotIdx = startIdx + i;
+    
+    if (slotIdx >= 3) break; // 最多填3个槽位
+    
+    state.files[slotIdx] = file;
+    
+    // 预览
+    const slot = document.getElementById(`slot${slotIdx}`);
+    const preview = document.getElementById(`preview${slotIdx}`);
+    const nameEl = document.getElementById(`name${slotIdx}`);
+    
+    const reader = new FileReader();
+    reader.onload = (e) => { preview.src = e.target.result; };
+    reader.readAsDataURL(file);
+    
+    slot.classList.add('has-file');
+    nameEl.textContent = file.name.length > 22 ? file.name.substring(0, 20) + '...' : file.name;
+    
+    addedSlots.push(slotIdx);
+    addedCount++;
+  }
+  
+  if (addedCount > 0) {
+    updateButtons();
+    updateStep();
+  }
+  
+  return { added: addedCount, slots: addedSlots };
+}
+
+function removeFile(event, idx) {
+  event.stopPropagation();
+  state.files[idx] = null;
+  const slot = document.getElementById(`slot${idx}`);
+  const preview = document.getElementById(`preview${idx}`);
+  const nameEl = document.getElementById(`name${idx}`);
+
+  slot.classList.remove('has-file');
+  preview.src = '';
+  nameEl.textContent = '';
+  document.getElementById(`fileInput${idx}`).value = '';
+
+  updateButtons();
+  updateStep();
+}
+
+// ===== 粘贴上传 =====
+// 当前聚焦的槽位（-1 = 无焦点）
+let _pasteFocusIdx = -1;
+
+function setPasteFocus(idx) {
+  _pasteFocusIdx = idx;
+  document.getElementById(`slot${idx}`).classList.add('paste-focus');
+}
+
+function clearPasteFocus(idx) {
+  if (_pasteFocusIdx === idx) _pasteFocusIdx = -1;
+  document.getElementById(`slot${idx}`).classList.remove('paste-focus');
+}
+
+/**
+ * 从 ClipboardEvent 或 DataTransfer 中提取所有图片文件
+ * 支持：截图粘贴（image/png blob）、文件复制粘贴（Files）
+ * @returns {File[]} 图片文件数组
+ */
+function extractImagesFromClipboard(e) {
+  const items = (e.clipboardData || e.originalEvent?.clipboardData)?.items;
+  if (!items) return [];
+  
+  const files = [];
+  for (const item of items) {
+    if (item.type.startsWith('image/')) {
+      const file = item.getAsFile();
+      if (file) files.push(file);
+    }
+  }
+  return files;
+}
+
+/**
+ * 决定粘贴到哪个槽位：
+ * 1. 若某个槽位有 paste-focus（用户刚点击/Tab聚焦），则粘进该槽位
+ * 2. 否则自动找第一个空槽位
+ */
+function resolvePasteTargetSlot() {
+  if (_pasteFocusIdx >= 0 && _pasteFocusIdx <= 2) return _pasteFocusIdx;
+  return state.files.findIndex(f => f === null); // -1 = 全满
+}
+
+document.addEventListener('paste', (e) => {
+  // 如果焦点在输入框里（比如 VIN 输入框），不拦截
+  if (document.activeElement && ['INPUT', 'TEXTAREA'].includes(document.activeElement.tagName)) {
+    return;
+  }
+
+  const files = extractImagesFromClipboard(e);
+  if (files.length === 0) return;
+
+  const targetIdx = resolvePasteTargetSlot();
+  if (targetIdx === -1) {
+    showToast('槽位已满', '3 张照片均已上传，请先删除再粘贴', 'warning');
+    return;
+  }
+
+  // 按文件名排序
+  files.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+
+  // 批量填入槽位
+  const results = addMultipleFiles(files, targetIdx);
+  
+  if (results.added === 0) {
+    showToast('槽位已满', '所有槽位均已填满', 'warning');
+  } else if (results.added === 1) {
+    const slotNames = ['车架号照片', '车牌号照片', '车身侧面照片'];
+    showToast(`已粘贴到${slotNames[results.slots[0]]} ✅`, `Ctrl+V 图片已填入第 ${results.slots[0] + 1} 槽`, 'success');
+  } else {
+    showToast(`已填入 ${results.added} 张照片 ✅`, `按文件名排序依次填入槽位`, 'success');
+  }
+});
+
+// ===== ZIP 批量归档 =====
+
+// 批次队列状态
+const zipState = {
+  batches: [],       // [{folderName, files:[File|null,File|null,File|null], vin, done}]
+  currentIdx: 0,
+};
+
+// 关键词→槽位映射表
+const SLOT_KEYWORDS = [
+  ['车架', 'vin', 'chassis', 'frame', '车体', '底盘'],
+  ['车牌', 'plate', '号牌', 'license', '牌照', '号牌'],
+  ['侧面', 'side', '车身', 'body', '车侧', '外观'],
+];
+
+function matchKeywordToSlot(filename) {
+  const lower = filename.toLowerCase();
+  for (let slot = 0; slot < 3; slot++) {
+    for (const kw of SLOT_KEYWORDS[slot]) {
+      if (lower.includes(kw)) return slot;
+    }
+  }
+  return -1; // 未匹配
+}
+
+/**
+ * 使用 showDirectoryPicker 一次选择多个文件夹
+ */
+async function selectMultipleFolders() {
+  if (!window.showDirectoryPicker) {
+    showToast('浏览器不支持', '请使用 Chrome / Edge 110+ 浏览器', 'error');
+    return;
+  }
+
+  // showDirectoryPicker 不支持 multiple 选项，需要多次调用
+  // 使用循环让用户逐个选择文件夹
+  const MAX_FOLDERS = 50; // 最大允许50个文件夹
+  const selectedHandles = [];
+  let continueSelecting = true;
+  let selectionCount = 0;
+
+  while (continueSelecting && selectedHandles.length < MAX_FOLDERS) {
+    try {
+      selectionCount++;
+      updateOverlay('请选择文件夹...', `第 ${selectionCount} 个文件夹（已选 ${selectedHandles.length} 个）\n\n按住 Ctrl 可在文件管理器中多选文件夹，或多次点击「打开」添加更多`);
+      
+      const handle = await window.showDirectoryPicker({ 
+        mode: 'read'
+      });
+      
+      selectedHandles.push(handle);
+      
+      // 如果是第一次选择，显示批量面板
+      if (selectedHandles.length === 1) {
+        _showZipPanel();
+      }
+      
+      // 询问是否继续添加
+      if (selectedHandles.length < MAX_FOLDERS) {
+        continueSelecting = confirm(`已添加「${handle.name}」\n\n已选择 ${selectedHandles.length} 个文件夹\n点击「确定」继续添加更多，点击「取消」开始处理`);
+      }
+    } catch (e) {
+      if (e.name === 'AbortError') {
+        // 用户取消选择，如果已经选了至少一个文件夹，就结束
+        if (selectedHandles.length > 0) {
+          continueSelecting = false;
+        } else {
+          // 一个都没选就取消了，直接返回
+          hideOverlay();
+          return;
+        }
+      } else {
+        showToast('选择失败', e.message, 'error');
+        console.error(e);
+      }
+    }
+  }
+
+  if (selectedHandles.length === 0) {
+    hideOverlay();
+    return;
+  }
+
+  hideOverlay();
+  showOverlay('正在加载图片...', `共 ${selectedHandles.length} 个文件夹`);
+
+  let addedCount = 0;
+  const startIdx = zipState.batches.length;
+
+  for (let i = 0; i < selectedHandles.length; i++) {
+    const dirHandle = selectedHandles[i];
+    updateOverlay('正在读取...', `${dirHandle.name} (${i + 1}/${selectedHandles.length})`);
+    
+    const images = await _readFolderImages(dirHandle);
+    
+    if (images.length > 0) {
+      const batch = _buildSingleBatch(dirHandle.name, images);
+      zipState.batches.push(batch);
+      addedCount++;
+    }
+  }
+
+  // 显示一键归档按钮
+  const batchBtn = document.getElementById('batchArchiveAllBtn');
+  batchBtn.style.display = 'inline-flex';
+  batchBtn.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
+  batchBtn.style.color = 'white';
+  batchBtn.style.padding = '8px 16px';
+  batchBtn.style.borderRadius = '8px';
+  batchBtn.style.fontSize = '13px';
+  batchBtn.style.fontWeight = '600';
+  batchBtn.style.border = 'none';
+  batchBtn.style.cursor = 'pointer';
+  batchBtn.style.boxShadow = '0 4px 14px rgba(124, 58, 237, 0.3)';
+  batchBtn.textContent = '🚀 一键归档全部';
+
+  document.getElementById('zipBatchCount').textContent = `${zipState.batches.length} 个文件夹`;
+  document.getElementById('zipProgressFill').style.width = '100%';
+  hideOverlay();
+  renderBatchQueue();
+
+  document.getElementById('zipParseStatus').textContent = 
+    `已添加 ${addedCount} 个文件夹（共${zipState.batches.length}个），请检查照片槽位并修正车架号`;
+  
+  // 首个批次自动 OCR
+  if (addedCount > 0 && startIdx === 0) {
+    await autoOCRFirstBatch();
+  }
+
+  showToast('文件夹已添加 📁', `已添加 ${addedCount} 个文件夹（共${zipState.batches.length}个）`, 'success');
+}
+
+/**
+ * 批量上传：选择一个总文件夹，自动遍历所有子文件夹
+ */
+async function selectBatchFolder() {
+  if (!window.showDirectoryPicker) {
+    showToast('浏览器不支持', '请使用 Chrome / Edge 110+ 浏览器', 'error');
+    return;
+  }
+
+  try {
+    // 选择总文件夹
+    showOverlay('请选择文件夹...', '请选择一个包含多个车辆子文件夹的总文件夹');
+    
+    const rootHandle = await window.showDirectoryPicker({
+      mode: 'read',
+      startIn: 'desktop',
+    });
+
+    hideOverlay();
+    showOverlay('正在扫描文件夹...', `正在扫描「${rootHandle.name}」`);
+
+    // 遍历所有子文件夹
+    const subFolders = [];
+    const subDirs = [];
+
+    for await (const entry of rootHandle.values()) {
+      if (entry.kind === 'directory') {
+        subDirs.push(entry);
+      }
+    }
+
+    if (subDirs.length === 0) {
+      hideOverlay();
+      showToast('未找到子文件夹', '所选文件夹内没有子文件夹，每个子文件夹应包含一辆车的照片', 'warning');
+      return;
+    }
+
+    showOverlay('正在处理...', `找到 ${subDirs.length} 个子文件夹`);
+
+    // 显示批量面板
+    _showZipPanel();
+
+    let addedCount = 0;
+    let skippedCount = 0;
+    const startIdx = zipState.batches.length;
+
+    for (let i = 0; i < subDirs.length; i++) {
+      const subDir = subDirs[i];
+      updateOverlay('正在读取...', `${subDir.name} (${i + 1}/${subDirs.length})`);
+
+      // 读取子文件夹中的所有图片
+      const images = [];
+      for await (const entry of subDir.values()) {
+        if (entry.kind === 'file' && isImageFile(entry.name)) {
+          try {
+            const file = await entry.getFile();
+            images.push({ path: entry.name, file });
+          } catch (e) {
+            console.warn(`无法读取文件 ${entry.name}:`, e);
+          }
+        }
+      }
+
+      if (images.length === 0) {
+        skippedCount++;
+        continue;
+      }
+
+      if (images.length < 3) {
+        skippedCount++;
+        console.warn(`跳过「${subDir.name}」：只有 ${images.length} 张照片`);
+        continue;
+      }
+
+      // 按文件名排序
+      images.sort((a, b) => a.path.localeCompare(b.path, undefined, { numeric: true }));
+
+      // 构建批次
+      const batch = _buildSingleBatch(subDir.name, images);
+      
+      // 尝试从车辆信息库匹配车架号（子文件夹名通常为车牌）
+      const matchedVin = findVinByPlate(subDir.name);
+      if (matchedVin) {
+        batch.vin = matchedVin;
+      }
+      
+      zipState.batches.push(batch);
+      addedCount++;
+    }
+
+    // 显示一键归档按钮
+    if (zipState.batches.length > 0) {
+      const batchBtn = document.getElementById('batchArchiveAllBtn');
+      batchBtn.style.display = 'inline-flex';
+      batchBtn.style.background = 'linear-gradient(135deg, #7c3aed, #6d28d9)';
+      batchBtn.style.color = 'white';
+      batchBtn.style.padding = '8px 16px';
+      batchBtn.style.borderRadius = '8px';
+      batchBtn.style.fontSize = '13px';
+      batchBtn.style.fontWeight = '600';
+      batchBtn.style.border = 'none';
+      batchBtn.style.cursor = 'pointer';
+      batchBtn.style.boxShadow = '0 4px 14px rgba(124, 58, 237, 0.3)';
+      batchBtn.textContent = '🚀 一键归档全部';
+    }
+
+    document.getElementById('zipBatchCount').textContent = `${zipState.batches.length} 个文件夹`;
+    document.getElementById('zipProgressFill').style.width = '100%';
+    hideOverlay();
+    renderBatchQueue();
+
+    // 统计匹配结果
+    const matchedCount = zipState.batches.slice(startIdx).filter(b => b.vin && b.vin.length >= 8).length;
+    const lib = getVehicleLib();
+    
+    // 显示结果
+    let statusMsg = `已添加 ${addedCount} 辆车`;
+    if (skippedCount > 0) {
+      statusMsg += `，跳过 ${skippedCount} 个（不足3张照片）`;
+    }
+    if (lib.length > 0 && matchedCount > 0) {
+      statusMsg = `已添加 ${addedCount} 辆车，从信息库匹配到 ${matchedCount} 个车架号`;
+    }
+    if (addedCount > matchedCount && lib.length > 0) {
+      statusMsg += `，${addedCount - matchedCount} 个待 OCR 识别`;
+    }
+    document.getElementById('zipParseStatus').textContent = statusMsg + '。请检查车架号并确认';
+
+    // 未匹配的批次自动 OCR
+    const unmatchedBatches = zipState.batches.slice(startIdx).filter(b => !b.vin || b.vin.length < 8);
+    if (unmatchedBatches.length > 0 && startIdx === 0) {
+      // 对首个未匹配的批次进行 OCR
+      const firstUnmatchedIdx = zipState.batches.indexOf(unmatchedBatches[0]);
+      if (firstUnmatchedIdx >= 0) {
+        zipState.currentIdx = firstUnmatchedIdx;
+        renderBatchQueue();
+        await autoOCRFirstBatch();
+      }
+    }
+
+    if (addedCount > 0) {
+      let msg = `成功导入 ${addedCount} 辆车`;
+      if (matchedCount > 0) msg += `，信息库匹配 ${matchedCount} 个`;
+      showToast('批量上传完成 🚗', msg, 'success');
+    } else {
+      showToast('未找到有效数据', '所选文件夹中没有符合要求的车辆照片（每车需3张）', 'warning');
+    }
+
+  } catch (e) {
+    hideOverlay();
+    if (e.name !== 'AbortError') {
+      showToast('选择失败', e.message, 'error');
+      console.error(e);
+    }
+  }
+}
+
+/**
+ * 读取单个文件夹中的所有图片
+ */
+async function _readFolderImages(dirHandle) {
+  const images = [];
+
+  try {
+    for await (const entry of dirHandle.values()) {
+      if (entry.kind === 'file' && isImageFile(entry.name)) {
+        try {
+          const file = await entry.getFile();
+          const relPath = entry.name;
+          images.push({ path: relPath, file });
+        } catch (e) {
+          console.warn(`无法读取文件 ${entry.name}:`, e);
+        }
+      }
+    }
+  } catch (e) {
+    console.warn(`无法读取文件夹 ${dirHandle.name}:`, e);
+  }
+
+  return images;
+}
+
+/**
+ * 一键归档全部文件夹
+ */
+async function batchArchiveAll() {
+  const pendingBatches = zipState.batches.filter(b => !b.done);
+  
+  if (pendingBatches.length === 0) {
+    showToast('没有待归档', '所有文件夹都已完成归档', 'info');
+    return;
+  }
+
+  // 检查是否已设置归档目录
+  if (!state.rootDirHandle) {
+    showToast('请先设置', '请先点击「📁 选择归档目录」设置目标文件夹', 'error');
+    // 滚动到设置区域
+    document.getElementById('dirSetupCard').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  // 检查车架号是否都已填写
+  const missingVin = pendingBatches.filter(b => !b.vin || b.vin.length < 8);
+  if (missingVin.length > 0) {
+    const proceed = confirm(`还有 ${missingVin.length} 个文件夹未填写车架号，继续归档？`);
+    if (!proceed) return;
+  }
+
+  showOverlay('正在批量归档...', `共 ${pendingBatches.length} 个文件夹`);
+
+  let successCount = 0;
+  let failCount = 0;
+
+  for (let i = 0; i < pendingBatches.length; i++) {
+    const batch = pendingBatches[i];
+    const idx = zipState.batches.indexOf(batch);
+    
+    zipState.currentIdx = idx;
+    renderBatchQueue();
+    
+    updateOverlay('正在归档...', `${batch.folderName} (${i + 1}/${pendingBatches.length})`);
+    
+    if (batch.vin && batch.vin.length >= 8) {
+      try {
+        await archiveBatch(idx);
+        successCount++;
+      } catch (e) {
+        failCount++;
+        console.error(`归档失败 ${batch.folderName}:`, e);
+      }
+    } else {
+      failCount++;
+    }
+  }
+
+  hideOverlay();
+  renderBatchQueue();
+
+  if (failCount === 0) {
+    showToast('🎉 全部归档完成！', `成功归档 ${successCount} 个文件夹`, 'success');
+    document.getElementById('zipDoneAll').style.display = 'block';
+  } else {
+    showToast('部分完成', `成功 ${successCount} 个，失败 ${failCount} 个`, 'warning');
+  }
+}
+
+/**
+ * 从图片列表构建单个批次（复用关键词匹配逻辑）
+ */
+function _buildSingleBatch(folderName, images) {
+  // 按文件名排序
+  const imgs = [...images].sort((a, b) => a.path.localeCompare(b.path));
+  const slots = [null, null, null];
+  const unmatched = [];
+
+  imgs.forEach(img => {
+    const slot = matchKeywordToSlot(img.path);
+    if (slot >= 0 && slots[slot] === null) {
+      slots[slot] = img.file;
+    } else {
+      unmatched.push(img.file);
+    }
+  });
+
+  // 剩余槽位按顺序填充未匹配图片
+  let ui = 0;
+  for (let s = 0; s < 3; s++) {
+    if (slots[s] === null && ui < unmatched.length) {
+      slots[s] = unmatched[ui++];
+    }
+  }
+
+  return {
+    folderName,
+    files: slots,
+    vin: '',
+    done: false,
+    doneResult: null,
+  };
+}
+
+/**
+ * 显示 ZIP 面板（通用初始化）
+ */
+function _showZipPanel() {
+  document.getElementById('zipPanel').classList.add('visible');
+  document.getElementById('batchQueue').innerHTML = '';
+  document.getElementById('zipDoneAll').style.display = 'none';
+  document.getElementById('zipProgressBar').style.display = 'block';
+}
+
+function isImageFile(path) {
+  const ext = path.split('.').pop().toLowerCase();
+  return ['jpg','jpeg','png','gif','webp','bmp'].includes(ext);
+}
+
+/**
+ * 自动对第一个未完成的批次运行 OCR
+ */
+async function autoOCRFirstBatch() {
+  const batch = zipState.batches.find(b => !b.done);
+  if (!batch || !batch.files[0]) return;
+
+  const toastId = Date.now();
+  showToast('🔍 正在自动识别...', `车架号：${batch.folderName}`, 'info');
+
+  try {
+    const worker = await Tesseract.createWorker('eng+chi_sim');
+    const { data } = await worker.recognize(batch.files[0]);
+    await worker.terminate();
+
+    const rawText = data.text;
+    const vin = extractVin(rawText);
+    if (vin) {
+      batch.vin = vin;
+      renderBatchQueue();
+      showToast('✅ VIN 已自动识别', `车架号：${vin}`, 'success');
+    } else {
+      showToast('未能识别 VIN', '请手动输入车架号', 'warning');
+      renderBatchQueue();
+    }
+  } catch (err) {
+    showToast('OCR 失败', err.message, 'error');
+    renderBatchQueue();
+  }
+}
+
+/**
+ * 渲染整个批次队列
+ */
+function renderBatchQueue() {
+  const container = document.getElementById('batchQueue');
+  const total = zipState.batches.length;
+  const currentBatch = zipState.batches[zipState.currentIdx];
+
+  // 显示剩余计数
+  const remaining = zipState.batches.filter(b => !b.done).length;
+  container.innerHTML = `
+    <div class="batch-queue-counter" id="batchQueueCounter">
+      ${remaining === 0 ? '全部处理完成！' : `还有 ${remaining} 个待归档`}
+    </div>
+  `;
+
+  zipState.batches.forEach((batch, idx) => {
+    const card = document.createElement('div');
+    card.className = 'batch-card' +
+      (batch.done ? ' done' : '') +
+      (idx === zipState.currentIdx && !batch.done ? ' current' : '');
+
+    const doneTag = batch.done
+      ? `<span class="batch-index">✓ 已完成</span>`
+      : idx === zipState.currentIdx
+        ? `<span class="batch-index">当前处理</span>`
+        : `<span class="batch-index">#${idx + 1}/${total}</span>`;
+
+    const SLOT_LABELS = ['① 车架号', '② 车牌号', '③ 车身侧面'];
+    const slotsHtml = batch.files.map((f, si) => {
+      if (f) {
+        const thumbUrl = URL.createObjectURL(f);
+        return `
+          <div class="batch-slot" id="bslot_${idx}_${si}"
+               draggable="true"
+               ondragstart="batchDragStart(event,${idx},${si})"
+               ondragover="batchDragOver(event,${idx},${si})"
+               ondrop="batchDrop(event,${idx},${si})"
+               ondragleave="batchDragLeave(event,${idx},${si})">
+            <div class="batch-slot-drag-handle">⋮⋮</div>
+            <div class="batch-slot-label">${SLOT_LABELS[si]}</div>
+            <img class="batch-slot-thumb" src="${thumbUrl}" alt="照片">
+            <div class="batch-slot-name">${f.name}</div>
+          </div>`;
+      } else {
+        return `
+          <div class="batch-slot" id="bslot_${idx}_${si}" style="opacity:0.4">
+            <div class="batch-slot-label">${SLOT_LABELS[si]}</div>
+            <div style="font-size:20px;margin:8px 0;color:var(--gray-300)">📷</div>
+            <div class="batch-slot-name">未检测到照片</div>
+          </div>`;
+      }
+    }).join('');
+
+    card.innerHTML = `
+      <div class="batch-card-header">
+        <span style="font-size:18px">📁</span>
+        <span class="batch-folder-name">${batch.folderName}</span>
+        ${doneTag}
+      </div>
+      <div class="batch-slots" id="batchSlots_${idx}">
+        ${slotsHtml}
+      </div>
+      ${!batch.done ? `
+        <div class="batch-card-footer">
+          <input class="batch-vin-input" type="text" id="batchVin_${idx}"
+                 placeholder="车架号（手动输入或自动识别）"
+                 value="${batch.vin}"
+                 maxlength="20"
+                 oninput="updateBatchVin(${idx},this.value)">
+          <button class="btn-batch-archive" id="batchArchiveBtn_${idx}"
+                  onclick="archiveBatch(${idx})"
+                  ${!batch.vin || batch.vin.length < 8 ? 'disabled' : ''}>
+            📂 归档此组
+          </button>
+        </div>
+      ` : `<div style="font-size:13px;color:var(--success);font-weight:600">✅ ${batch.doneResult}</div>`}
+    `;
+
+    container.appendChild(card);
+  });
+}
+
+/**
+ * 更新批次 VIN
+ */
+function updateBatchVin(idx, value) {
+  zipState.batches[idx].vin = value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const btn = document.getElementById(`batchArchiveBtn_${idx}`);
+  if (btn) btn.disabled = zipState.batches[idx].vin.length < 8;
+}
+
+/**
+ * 批次内槽位拖拽交换
+ */
+let _drag = { batchIdx: -1, slotIdx: -1 };
+
+function batchDragStart(event, batchIdx, slotIdx) {
+  _drag = { batchIdx, slotIdx };
+  event.dataTransfer.effectAllowed = 'move';
+  setTimeout(() => {
+    const el = document.getElementById(`bslot_${batchIdx}_${slotIdx}`);
+    if (el) el.classList.add('dragging');
+  }, 0);
+}
+
+function batchDragOver(event, batchIdx, slotIdx) {
+  event.preventDefault();
+  event.dataTransfer.dropEffect = 'move';
+  const el = document.getElementById(`bslot_${batchIdx}_${slotIdx}`);
+  if (el) el.classList.add('drag-over');
+}
+
+function batchDragLeave(event, batchIdx, slotIdx) {
+  const el = document.getElementById(`bslot_${batchIdx}_${slotIdx}`);
+  if (el) el.classList.remove('drag-over');
+}
+
+function batchDrop(event, batchIdx, slotIdx) {
+  event.preventDefault();
+  // 清除所有 drag-over 状态
+  document.querySelectorAll('.batch-slot').forEach(el => el.classList.remove('drag-over', 'dragging'));
+
+  if (_drag.batchIdx === batchIdx && _drag.slotIdx === slotIdx) return;
+
+  // 交换两个槽位的文件
+  const batch = zipState.batches[batchIdx];
+  const temp = batch.files[_drag.slotIdx];
+  batch.files[_drag.slotIdx] = batch.files[slotIdx];
+  batch.files[slotIdx] = temp;
+
+  renderBatchQueue();
+  showToast('已交换照片位置 ✅', '槽位已调整，请确认对应关系正确', 'success');
+}
+
+/**
+ * 归档单个批次
+ */
+async function archiveBatch(batchIdx) {
+  const batch = zipState.batches[batchIdx];
+  const vin = batch.vin.trim().toUpperCase();
+
+  if (!vin || vin.length < 8) {
+    showToast('请输入有效车架号', '', 'warning');
+    return;
+  }
+
+  if (!batch.files.every(f => f !== null)) {
+    const missing = batch.files.map((f, i) => f ? null : ['①车架号','②车牌号','③车身侧面'][i]).filter(Boolean);
+    showToast('照片不完整', `缺少：${missing.join('、')}`, 'warning');
+    return;
+  }
+
+  if (!state.rootDirHandle) {
+    showToast('未设置归档目录', '请先点击「选择归档目录」', 'warning');
+    document.getElementById('dirSetupCard').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  try {
+    const permission = await state.rootDirHandle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted') {
+      const req = await state.rootDirHandle.requestPermission({ mode: 'readwrite' });
+      if (req !== 'granted') throw new Error('权限不足');
+    }
+
+    // 获取/创建子文件夹
+    const subHandles = [];
+    for (const folderName of state.folderNames) {
+      subHandles.push(await state.rootDirHandle.getDirectoryHandle(folderName, { create: true }));
+    }
+
+    // 写入文件
+    const results = [];
+    for (let i = 0; i < 3; i++) {
+      const file = batch.files[i];
+      const ext = getExtension(file.name);
+      const newName = `${vin}${ext}`;
+      const fileHandle = await subHandles[i].getFileHandle(newName, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(file);
+      await writable.close();
+      results.push({ success: true, name: newName });
+    }
+
+    batch.done = true;
+    batch.doneResult = `车架号 ${vin} — 3张照片已归档`;
+
+    // 如果这是最后一个未完成的，移动到下一组
+    const nextIdx = zipState.batches.findIndex((b, i) => i > batchIdx && !b.done);
+    if (nextIdx >= 0) {
+      zipState.currentIdx = nextIdx;
+    }
+
+    renderBatchQueue();
+    showToast('归档成功 🎉', `「${batch.folderName}」已完成 ${vin}`, 'success');
+
+    // 如果全部完成
+    const allDone = zipState.batches.every(b => b.done);
+    if (allDone) {
+      document.getElementById('zipDoneAll').style.display = 'block';
+      document.getElementById('batchQueueCounter').textContent = '🎉 全部归档完成！';
+    } else {
+      // 自动对下一组运行 OCR
+      await autoOCXCurrentBatch();
+    }
+
+  } catch (err) {
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      state.rootDirHandle = null;
+      renderDirStatus();
+      updateButtons();
+      showToast('目录授权失效', '请重新选择归档目录', 'warning');
+    } else {
+      showToast('归档失败', err.message, 'error');
+    }
+    console.error(err);
+  }
+}
+
+async function autoOCXCurrentBatch() {
+  const batch = zipState.batches.find(b => !b.done);
+  if (!batch || !batch.files[0]) return;
+
+  try {
+    const worker = await Tesseract.createWorker('eng+chi_sim');
+    const { data } = await worker.recognize(batch.files[0]);
+    await worker.terminate();
+
+    const vin = extractVin(data.text);
+    if (vin) {
+      batch.vin = vin;
+      renderBatchQueue();
+      // 聚焦 VIN 输入框
+      setTimeout(() => {
+        const input = document.getElementById(`batchVin_${zipState.batches.indexOf(batch)}`);
+        if (input) input.focus();
+      }, 200);
+    }
+  } catch (err) {
+    console.error('Auto OCR failed:', err);
+  }
+}
+
+/**
+ * 关闭 ZIP 面板
+ */
+function closeZipPanel() {
+  document.getElementById('zipPanel').classList.remove('visible');
+  document.getElementById('addFolderBtn').style.display = 'none';
+}
+
+/**
+ * 重置 ZIP 面板
+ */
+function resetZipPanel() {
+  zipState.batches = [];
+  zipState.currentIdx = 0;
+  document.getElementById('zipDoneAll').style.display = 'none';
+  document.getElementById('batchQueue').innerHTML = '';
+  document.getElementById('zipProgressBar').style.display = 'none';
+  document.getElementById('zipParseStatus').textContent = '';
+  document.getElementById('zipPanel').classList.remove('visible');
+  document.getElementById('addFolderBtn').style.display = 'none';
+  showToast('已就绪', '可继续添加更多文件夹', 'info');
+}
+
+// ===== OCR识别 =====
+async function runOCR() {
+  const file = state.files[0];
+  if (!file) {
+    showToast('提示', '请先上传车架号照片', 'warning');
+    return;
+  }
+
+  const btn = document.getElementById('ocrBtn');
+  const rawEl = document.getElementById('ocrRawText');
+  const progress = document.getElementById('ocrProgress');
+  const progressBar = document.getElementById('ocrProgressBar');
+  const progressLabel = document.getElementById('ocrProgressLabel');
+
+  btn.disabled = true;
+  btn.textContent = '⏳ 识别中...';
+  progress.classList.add('show');
+  progressBar.style.width = '0%';
+  rawEl.innerHTML = '<span style="color:var(--gray-400)">正在分析图像...</span>';
+
+  try {
+    const worker = await Tesseract.createWorker('eng+chi_sim', 1, {
+      logger: m => {
+        if (m.status === 'recognizing text') {
+          const pct = Math.round(m.progress * 100);
+          progressBar.style.width = pct + '%';
+          progressLabel.textContent = `识别进度 ${pct}%`;
+        } else if (m.status === 'loading language traineddata') {
+          progressLabel.textContent = '加载语言模型...';
+          progressBar.style.width = '30%';
+        } else if (m.status === 'initializing api') {
+          progressLabel.textContent = '初始化OCR引擎...';
+          progressBar.style.width = '60%';
+        }
+      }
+    });
+
+    const result = await worker.recognize(file);
+    await worker.terminate();
+
+    const rawText = result.data.text;
+    const vin = extractVIN(rawText);
+
+    rawEl.innerHTML = rawText
+      ? `<pre style="white-space:pre-wrap;font-size:12px;">${escapeHtml(rawText.substring(0, 500))}</pre>`
+      : '<span style="color:var(--gray-400)">未识别到文字</span>';
+
+    if (vin) {
+      document.getElementById('vinInput').value = vin;
+      state.vin = vin;
+      validateVin();
+      showToast('识别成功', `已自动提取车架号：${vin}`, 'success');
+    } else {
+      // 尝试提取最长的字母数字串作为候选
+      const candidates = extractCandidates(rawText);
+      if (candidates.length > 0) {
+        document.getElementById('vinInput').value = candidates[0];
+        rawEl.innerHTML += `<div style="margin-top:8px;padding:8px;background:#fef9c3;border-radius:6px;font-size:12px;">
+          🔍 候选车架号（请人工确认）：<b>${candidates.join(' | ')}</b>
+        </div>`;
+        showToast('请人工确认', '已提取候选编号，请核对后确认', 'warning');
+      } else {
+        showToast('识别提示', '未自动识别到标准车架号，请手动输入', 'warning');
+      }
+    }
+
+    progress.classList.remove('show');
+    progressBar.style.width = '100%';
+    updateButtons();
+    updateStep();
+
+  } catch (err) {
+    progress.classList.remove('show');
+    rawEl.innerHTML = `<span style="color:var(--danger)">识别失败：${err.message}</span>`;
+    showToast('识别失败', '请检查网络或手动输入车架号', 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '🔄 重新识别';
+  }
+}
+
+// 标准VIN码提取（17位，符合ISO 3779）
+function extractVIN(text) {
+  // 车架号：17位，不含I、O、Q，可能有空格分隔
+  const cleaned = text.replace(/[\s\n\r]/g, '').toUpperCase();
+  const vinPattern = /[A-HJ-NPR-Z0-9]{17}/g;
+  const matches = cleaned.match(vinPattern);
+  if (matches && matches.length > 0) return matches[0];
+
+  // 宽松模式：允许I O Q（有些OCR会误识别）
+  const loosePattern = /[A-Z0-9]{17}/g;
+  const looseMatches = cleaned.match(loosePattern);
+  if (looseMatches && looseMatches.length > 0) return looseMatches[0];
+
+  return null;
+}
+
+function extractCandidates(text) {
+  const cleaned = text.replace(/\s+/g, ' ').toUpperCase();
+  const segments = cleaned.match(/[A-Z0-9]{10,}/g) || [];
+  return segments.slice(0, 3);
+}
+
+function escapeHtml(text) {
+  return text.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ===== VIN验证 =====
+function validateVin() {
+  const val = document.getElementById('vinInput').value.trim().toUpperCase();
+  document.getElementById('vinInput').value = val;
+  state.vin = val;
+
+  const hintEl = document.getElementById('vinHint');
+  const input = document.getElementById('vinInput');
+
+  if (val.length === 0) {
+    input.className = 'vin-input';
+    hintEl.innerHTML = '车架号通常为 17 位字母+数字';
+  } else if (val.length === 17) {
+    input.className = 'vin-input valid';
+    hintEl.innerHTML = '<span class="ok">✓ 格式正确（17位）</span>';
+  } else if (val.length < 17) {
+    input.className = 'vin-input invalid';
+    hintEl.innerHTML = `<span class="err">还需 ${17 - val.length} 位（当前 ${val.length} 位）</span>`;
+  } else {
+    input.className = 'vin-input invalid';
+    hintEl.innerHTML = `<span class="err">超出长度（当前 ${val.length} 位，最多17位）</span>`;
+  }
+
+  updateButtons();
+  updateStep();
+}
+
+// ===== 按钮状态更新 =====
+function updateButtons() {
+  const hasVin = state.vin && state.vin.length >= 8;
+  const hasAllFiles = state.files.every(f => f !== null);
+  const ocrBtn = document.getElementById('ocrBtn');
+  const archiveBtn = document.getElementById('archiveBtn');
+  const readyHint = document.getElementById('readyHint');
+
+  ocrBtn.disabled = !state.files[0];
+
+  if (hasAllFiles && hasVin && state.rootDirHandle) {
+    archiveBtn.disabled = false;
+    readyHint.innerHTML = '<span style="color:var(--success)">✓ 就绪，可以归档</span>';
+  } else {
+    archiveBtn.disabled = true;
+    const missing = [];
+    if (!state.rootDirHandle) missing.push('归档目录');
+    if (!state.files[0]) missing.push('车架号照片');
+    if (!state.files[1]) missing.push('车牌号照片');
+    if (!state.files[2]) missing.push('车身侧面照片');
+    if (!hasVin) missing.push('车架号');
+    readyHint.textContent = `缺少：${missing.join('、')}`;
+  }
+}
+
+// ===== 选择归档根目录 =====
+async function selectRootDir() {
+  if (!window.showDirectoryPicker) {
+    showToast('浏览器不支持', '请使用 Chrome / Edge 110+ 浏览器', 'error');
+    return;
+  }
+
+  // 尝试恢复上次的目录
+  const savedHandle = await loadDirHandle('archiveRoot');
+  if (savedHandle) {
+    state.rootDirHandle = savedHandle;
+    renderDirStatus();
+    updateButtons();
+    showToast('已恢复上次的目录 ✅', `归档根目录：${savedHandle.name}`, 'success');
+    return;
+  }
+
+  try {
+    const handle = await window.showDirectoryPicker({
+      id: 'archive-root',
+      mode: 'readwrite',
+      startIn: 'desktop',
+    });
+    state.rootDirHandle = handle;
+    // 保存到 IndexedDB
+    await saveDirHandle('archiveRoot', handle);
+    renderDirStatus();
+    showToast('目录已设置 ✅', `归档根目录：${handle.name}，已自动记住`, 'success');
+    updateButtons();
+  } catch (e) {
+    if (e.name !== 'AbortError') {
+      showToast('选择失败', e.message, 'error');
+    }
+  }
+}
+
+// ===== 渲染目录状态 =====
+function renderDirStatus() {
+  const handle = state.rootDirHandle;
+  const display = document.getElementById('dirDisplay');
+  const pathEl = document.getElementById('dirPath');
+  const badge = document.getElementById('dirSetBadge');
+  const subPreview = document.getElementById('dirSubPreview');
+  const notSetHint = document.getElementById('dirNotSetHint');
+
+  if (handle) {
+    display.classList.add('set');
+    pathEl.textContent = handle.name + '  →  ' + state.folderNames.join(' / ');
+    badge.innerHTML = '<span style="color:var(--success);font-weight:700;">✓ 已设置</span>';
+    subPreview.style.display = 'flex';
+    notSetHint.style.display = 'none';
+
+    // 子目录小标签样式
+    state.folderNames.forEach((name, i) => {
+      const chip = document.getElementById(`subChip${i}`);
+      chip.className = 'dir-sub-chip ok';
+      chip.textContent = `📁 ${handle.name} / ${name}`;
+    });
+  } else {
+    display.classList.remove('set');
+    pathEl.textContent = '尚未选择，点击右侧按钮选择一次即可';
+    badge.textContent = '未设置';
+    subPreview.style.display = 'none';
+    notSetHint.style.display = 'flex';
+  }
+}
+
+// ===== 步骤更新 =====
+function updateStep() {
+  const s1 = document.getElementById('step1');
+  const s2 = document.getElementById('step2');
+  const s3 = document.getElementById('step3');
+  const s4 = document.getElementById('step4');
+
+  const hasAnyFile = state.files.some(f => f !== null);
+  const hasAllFiles = state.files.every(f => f !== null);
+  const hasVin = state.vin && state.vin.length >= 8;
+
+  // 重置
+  [s1,s2,s3,s4].forEach(s => { s.classList.remove('active','done'); });
+
+  if (!hasAnyFile) {
+    s1.classList.add('active');
+  } else if (!hasAllFiles || !hasVin) {
+    s1.classList.add('done');
+    s2.classList.add('active');
+  } else if (hasAllFiles && hasVin) {
+    s1.classList.add('done');
+    s2.classList.add('done');
+    s3.classList.add('active');
+  }
+}
+
+// ===== 核心归档功能 =====
+async function startArchive() {
+  const vin = state.vin.trim().toUpperCase();
+
+  if (!vin || vin.length < 6) {
+    showToast('请输入车架号', '车架号不能为空', 'error');
+    return;
+  }
+
+  if (!state.files.every(f => f !== null)) {
+    showToast('照片不完整', '请上传全部3张照片', 'error');
+    return;
+  }
+
+  // 检查是否已设置归档目录
+  if (!state.rootDirHandle) {
+    showToast('未设置归档目录', '请先点击「选择归档目录」按钮完成设置', 'warning');
+    // 滚动到设置区域
+    document.getElementById('dirSetupCard').scrollIntoView({ behavior: 'smooth' });
+    return;
+  }
+
+  showOverlay('正在归档...', `车架号：${vin} → ${state.rootDirHandle.name}`);
+
+  try {
+    // 验证根目录权限（handle可能因刷新失效，重新请求一次权限确认）
+    const permission = await state.rootDirHandle.queryPermission({ mode: 'readwrite' });
+    if (permission !== 'granted') {
+      const req = await state.rootDirHandle.requestPermission({ mode: 'readwrite' });
+      if (req !== 'granted') {
+        hideOverlay();
+        showToast('权限不足', '请重新授权归档目录访问权限', 'error');
+        return;
+      }
+    }
+
+    updateOverlay('正在创建子文件夹...', `根目录：${state.rootDirHandle.name}`);
+
+    // 获取/创建3个子文件夹
+    const subHandles = [];
+    for (let i = 0; i < state.folderNames.length; i++) {
+      const folderName = state.folderNames[i];
+      const handle = await state.rootDirHandle.getDirectoryHandle(folderName, { create: true });
+      subHandles.push(handle);
+      updateFolderStatus(i, true, `${state.rootDirHandle.name} / ${folderName}`);
+    }
+
+    updateOverlay('正在写入文件...', '重命名并分发照片到对应文件夹');
+
+    // 写入文件
+    const results = [];
+    for (let i = 0; i < 3; i++) {
+      const file = state.files[i];
+      const ext = getExtension(file.name);
+      const newName = `${vin}${ext}`;
+
+      try {
+        const fileHandle = await subHandles[i].getFileHandle(newName, { create: true });
+        const writable = await fileHandle.createWritable();
+        await writable.write(file);
+        await writable.close();
+        results.push({ slot: i, success: true, name: newName });
+      } catch (e) {
+        results.push({ slot: i, success: false, error: e.message });
+      }
+    }
+
+    hideOverlay();
+
+    // 计算结果
+    const success = results.filter(r => r.success).length;
+    const failed = results.filter(r => !r.success).length;
+
+    if (success === 3) {
+      showToast('归档完成 🎉', `车架号 ${vin} - 3张照片已成功归档`, 'success');
+      addHistory(vin, true, '3/3 张成功');
+
+      document.getElementById('step3').classList.remove('active');
+      document.getElementById('step3').classList.add('done');
+      document.getElementById('step4').classList.add('active');
+    } else {
+      showToast('部分失败', `${success}张成功，${failed}张失败`, 'warning');
+      addHistory(vin, false, `${success}/3 张成功`);
+    }
+
+    // 2.5秒后自动清空，准备下一台
+    setTimeout(() => {
+      clearPhotosOnly();
+      showToast('已就绪', '照片已清空，可以处理下一台车辆', 'info');
+    }, 2500);
+
+  } catch (err) {
+    hideOverlay();
+    // 如果是权限失效，引导用户重新选择目录
+    if (err.name === 'NotAllowedError' || err.name === 'SecurityError') {
+      state.rootDirHandle = null;
+      renderDirStatus();
+      updateButtons();
+      showToast('目录授权已失效', '请重新选择归档目录', 'warning');
+    } else {
+      showToast('归档失败', err.message || '发生未知错误', 'error');
+    }
+    console.error(err);
+  }
+}
+
+function getExtension(filename) {
+  const dotIdx = filename.lastIndexOf('.');
+  return dotIdx >= 0 ? filename.substring(dotIdx) : '.jpg';
+}
+
+// ===== 清空 =====
+function clearAll() {
+  for (let i = 0; i < 3; i++) {
+    state.files[i] = null;
+    document.getElementById(`slot${i}`).classList.remove('has-file');
+    document.getElementById(`preview${i}`).src = '';
+    document.getElementById(`name${i}`).textContent = '';
+    document.getElementById(`fileInput${i}`).value = '';
+  }
+  state.vin = '';
+  document.getElementById('vinInput').value = '';
+  document.getElementById('vinInput').className = 'vin-input';
+  document.getElementById('vinHint').textContent = '车架号通常为 17 位字母+数字';
+  document.getElementById('ocrRawText').innerHTML = '<span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮...</span>';
+  document.getElementById('ocrBtn').textContent = '🔍 OCR 识别车架号';
+
+  // 文件夹状态：目录未设置时重置为待定，已设置时保持绿色
+  for (let i = 0; i < 3; i++) {
+    if (state.rootDirHandle) {
+      updateFolderStatus(i, true, `${state.rootDirHandle.name} / ${state.folderNames[i]}`);
+    } else {
+      updateFolderStatus(i, false, '未授权访问');
+    }
+  }
+
+  updateButtons();
+  updateStep();
+}
+
+function clearPhotosOnly() {
+  for (let i = 0; i < 3; i++) {
+    state.files[i] = null;
+    document.getElementById(`slot${i}`).classList.remove('has-file');
+    document.getElementById(`preview${i}`).src = '';
+    document.getElementById(`name${i}`).textContent = '';
+    document.getElementById(`fileInput${i}`).value = '';
+  }
+  state.vin = '';
+  document.getElementById('vinInput').value = '';
+  document.getElementById('vinInput').className = 'vin-input';
+  document.getElementById('vinHint').textContent = '车架号通常为 17 位字母+数字';
+  document.getElementById('ocrRawText').innerHTML = '<span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮...</span>';
+  document.getElementById('ocrBtn').textContent = '🔍 OCR 识别车架号';
+  updateButtons();
+
+  // 重置步骤，保持目录绿色状态
+  [1,2,3,4].forEach(n => {
+    document.getElementById(`step${n}`).classList.remove('active','done');
+  });
+  document.getElementById('step1').classList.add('active');
+}
+
+// ===== 文件夹状态 =====
+function updateFolderStatus(idx, ready, msg) {
+  const item = document.getElementById(`folderItem${idx}`);
+  const statusEl = item.querySelector('.fi-status');
+  item.className = `folder-item ${ready ? 'ready' : 'pending'}`;
+  statusEl.textContent = msg;
+}
+
+// ===== 历史记录 =====
+function addHistory(vin, success, note) {
+  state.history.unshift({ vin, success, note, time: new Date().toLocaleTimeString() });
+  const histEl = document.getElementById('historyList');
+  document.getElementById('historyCount').textContent = state.history.length;
+
+  histEl.innerHTML = state.history.map(h => `
+    <div class="history-item">
+      <span style="font-size:20px">${h.success ? '✅' : '⚠️'}</span>
+      <div class="hi-vin">${h.vin}</div>
+      <div class="hi-status">
+        <span class="hi-badge ${h.success ? 'ok' : 'err'}">${h.note}</span>
+      </div>
+      <div class="hi-time">${h.time}</div>
+    </div>
+  `).join('');
+}
+
+// ===== 遮罩 =====
+function showOverlay(title, msg) {
+  document.getElementById('overlayTitle').textContent = title;
+  document.getElementById('overlayMsg').textContent = msg;
+  document.getElementById('overlay').classList.add('show');
+}
+
+function updateOverlay(title, msg) {
+  document.getElementById('overlayTitle').textContent = title;
+  document.getElementById('overlayMsg').textContent = msg;
+}
+
+function hideOverlay() {
+  document.getElementById('overlay').classList.remove('show');
+}
+
+// ===== Toast通知 =====
+function showToast(title, msg, type = 'info') {
+  const icons = { success: '✅', error: '❌', warning: '⚠️', info: 'ℹ️' };
+  const container = document.getElementById('toastContainer');
+
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.innerHTML = `
+    <span class="toast-icon">${icons[type] || 'ℹ️'}</span>
+    <div class="toast-body">
+      <div class="toast-title">${title}</div>
+      ${msg ? `<div class="toast-msg">${msg}</div>` : ''}
+    </div>
+  `;
+
+  container.appendChild(toast);
+  setTimeout(() => {
+    toast.style.transition = 'all 0.35s';
+    toast.style.opacity = '0';
+    toast.style.transform = 'translateX(60px)';
+    setTimeout(() => container.removeChild(toast), 400);
+  }, 4000);
+}
+
+// ===== 初始化 =====
+document.addEventListener('DOMContentLoaded', async () => {
+  // 检查API支持
+  if (!window.showDirectoryPicker) {
+    showToast(
+      '浏览器兼容性提示',
+      '您的浏览器不支持 File System Access API，请使用 Chrome/Edge 110+ 浏览器以获得完整功能',
+      'warning'
+    );
+  }
+  renderDirStatus();
+  updateStep();
+  updateButtons();
+
+  // 自动恢复上次的归档目录
+  const savedHandle = await loadDirHandle('archiveRoot');
+  if (savedHandle) {
+    state.rootDirHandle = savedHandle;
+    renderDirStatus();
+    updateButtons();
+  }
+
+  // 全局拖拽事件阻止
+  document.addEventListener('dragover', e => e.preventDefault());
+  document.addEventListener('drop', e => e.preventDefault());
+});
+
+</script>
+</body>
+</html>
