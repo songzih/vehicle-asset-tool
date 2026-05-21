@@ -403,6 +403,60 @@
     .vin-hint span.ok { color: var(--success); }
     .vin-hint span.err { color: var(--danger); }
 
+    .llm-settings {
+      margin-top: 14px;
+      border: 1px solid var(--gray-200);
+      border-radius: 10px;
+      background: white;
+      overflow: hidden;
+    }
+
+    .llm-settings summary {
+      cursor: pointer;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-700);
+      user-select: none;
+    }
+
+    .llm-settings-body {
+      border-top: 1px solid var(--gray-100);
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .llm-row {
+      display: grid;
+      grid-template-columns: 120px 1fr;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      color: var(--gray-600);
+    }
+
+    .llm-row input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid var(--gray-200);
+      border-radius: 8px;
+      font-size: 12px;
+    }
+
+    .llm-actions {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .llm-tip {
+      font-size: 12px;
+      color: var(--gray-400);
+      line-height: 1.5;
+    }
+
     /* OCR进度 */
     .ocr-progress {
       margin-top: 12px;
@@ -1344,6 +1398,31 @@
             onkeyup="validateVin()"
           >
           <div class="vin-hint" id="vinHint">车架号通常为 17 位字母+数字</div>
+          <details class="llm-settings" id="llmSettings">
+            <summary>大模型识别设置（可选，优先用于OCR）</summary>
+            <div class="llm-settings-body">
+              <label class="llm-row">
+                <span>接口地址</span>
+                <input id="llmEndpoint" placeholder="https://api.openai.com/v1/chat/completions">
+              </label>
+              <label class="llm-row">
+                <span>模型</span>
+                <input id="llmModel" placeholder="gpt-4o-mini">
+              </label>
+              <label class="llm-row">
+                <span>API Key</span>
+                <input id="llmApiKey" type="password" placeholder="仅保存在当前浏览器本地">
+              </label>
+              <div class="llm-actions">
+                <button class="btn btn-ghost" type="button" onclick="saveLlmConfig()">保存设置</button>
+                <button class="btn btn-ghost" type="button" onclick="clearLlmConfig()">清除</button>
+                <span class="llm-tip" id="llmStatus">未配置时自动使用本地OCR</span>
+              </div>
+              <div class="llm-tip">
+                需使用支持图片输入且允许浏览器跨域调用的 OpenAI 兼容接口。不要在公共电脑保存 API Key。
+              </div>
+            </div>
+          </details>
         </div>
       </div>
     </div>
@@ -2471,17 +2550,12 @@ async function autoOCRFirstBatch() {
   showToast('🔍 正在自动识别...', `车架号：${batch.folderName}`, 'info');
 
   try {
-    const worker = await createVinOcrWorker();
-    const image = await prepareVinImage(batch.files[0]);
-    const { data } = await worker.recognize(image);
-    await worker.terminate();
-
-    const rawText = data.text;
-    const vin = extractVIN(rawText);
+    const result = await recognizeVinFromFile(batch.files[0]);
+    const vin = result.vin;
     if (vin) {
       batch.vin = vin;
       renderBatchQueue();
-      showToast('✅ VIN 已自动识别', `车架号：${vin}`, 'success');
+      showToast('✅ VIN 已自动识别', `${result.source}：${vin}`, 'success');
     } else {
       showToast('未能识别 VIN', '请手动输入车架号', 'warning');
       renderBatchQueue();
@@ -2717,12 +2791,8 @@ async function autoOCXCurrentBatch() {
   if (!batch || !batch.files[0]) return;
 
   try {
-    const worker = await createVinOcrWorker();
-    const image = await prepareVinImage(batch.files[0]);
-    const { data } = await worker.recognize(image);
-    await worker.terminate();
-
-    const vin = extractVIN(data.text);
+    const result = await recognizeVinFromFile(batch.files[0]);
+    const vin = result.vin;
     if (vin) {
       batch.vin = vin;
       renderBatchQueue();
@@ -2761,11 +2831,77 @@ function resetZipPanel() {
 }
 
 // ===== OCR识别 =====
+const LLM_CONFIG_KEY = 'vinOcrLlmConfig';
 const VIN_OCR_OPTIONS = {
   workerPath: 'https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/worker.min.js',
   corePath: 'https://cdn.jsdelivr.net/npm/tesseract.js-core@5/tesseract-core-simd.wasm.js',
   langPath: 'https://tessdata.projectnaptha.com/4.0.0',
 };
+
+function getLlmConfig() {
+  try {
+    const endpoint = document.getElementById('llmEndpoint')?.value.trim() || '';
+    const model = document.getElementById('llmModel')?.value.trim() || '';
+    const apiKey = document.getElementById('llmApiKey')?.value.trim() || '';
+
+    if (endpoint || model || apiKey) {
+      return { endpoint, model, apiKey };
+    }
+
+    const saved = localStorage.getItem(LLM_CONFIG_KEY);
+    return saved ? JSON.parse(saved) : { endpoint: '', model: '', apiKey: '' };
+  } catch (e) {
+    return { endpoint: '', model: '', apiKey: '' };
+  }
+}
+
+function saveLlmConfig() {
+  const config = {
+    endpoint: document.getElementById('llmEndpoint').value.trim(),
+    model: document.getElementById('llmModel').value.trim(),
+    apiKey: document.getElementById('llmApiKey').value.trim(),
+  };
+
+  if (!config.endpoint || !config.model || !config.apiKey) {
+    showToast('配置不完整', '请填写接口地址、模型和 API Key', 'warning');
+    return;
+  }
+
+  localStorage.setItem(LLM_CONFIG_KEY, JSON.stringify(config));
+  updateLlmStatus();
+  showToast('已保存', '将优先使用大模型识别 VIN', 'success');
+}
+
+function clearLlmConfig() {
+  localStorage.removeItem(LLM_CONFIG_KEY);
+  ['llmEndpoint', 'llmModel', 'llmApiKey'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  updateLlmStatus();
+  showToast('已清除', '将使用本地 OCR 识别', 'info');
+}
+
+function initLlmSettings() {
+  const saved = getLlmConfig();
+  const endpointEl = document.getElementById('llmEndpoint');
+  const modelEl = document.getElementById('llmModel');
+  const apiKeyEl = document.getElementById('llmApiKey');
+
+  if (endpointEl && !endpointEl.value) endpointEl.value = saved.endpoint || 'https://api.openai.com/v1/chat/completions';
+  if (modelEl && !modelEl.value) modelEl.value = saved.model || 'gpt-4o-mini';
+  if (apiKeyEl && !apiKeyEl.value) apiKeyEl.value = saved.apiKey || '';
+  updateLlmStatus();
+}
+
+function updateLlmStatus() {
+  const status = document.getElementById('llmStatus');
+  if (!status) return;
+  const config = getLlmConfig();
+  status.textContent = config.endpoint && config.model && config.apiKey
+    ? `已配置：${config.model}，将优先使用大模型`
+    : '未配置时自动使用本地OCR';
+}
 
 async function createVinOcrWorker(logger) {
   if (!window.Tesseract) {
@@ -2780,6 +2916,7 @@ async function createVinOcrWorker(logger) {
   await worker.setParameters({
     tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789- ',
     preserve_interword_spaces: '1',
+    tessedit_pageseg_mode: '6',
   });
 
   return worker;
@@ -2801,7 +2938,7 @@ function loadVinImage(file) {
   });
 }
 
-async function prepareVinImage(file) {
+async function prepareVinImage(file, mode = 'auto') {
   const img = await loadVinImage(file);
   const maxSide = 2200;
   const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
@@ -2816,7 +2953,14 @@ async function prepareVinImage(file) {
   const data = imageData.data;
   for (let i = 0; i < data.length; i += 4) {
     const gray = data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114;
-    const adjusted = Math.min(255, Math.max(0, (gray - 118) * 1.35 + 138));
+    let adjusted = gray;
+    if (mode === 'auto') {
+      adjusted = Math.min(255, Math.max(0, (gray - 118) * 1.35 + 138));
+    } else if (mode === 'highContrast') {
+      adjusted = gray > 145 ? 255 : 0;
+    } else if (mode === 'invert') {
+      adjusted = 255 - gray;
+    }
     data[i] = adjusted;
     data[i + 1] = adjusted;
     data[i + 2] = adjusted;
@@ -2824,6 +2968,118 @@ async function prepareVinImage(file) {
   ctx.putImageData(imageData, 0, 0);
 
   return canvas;
+}
+
+async function prepareLlmImageDataUrl(file) {
+  const img = await loadVinImage(file);
+  const maxSide = 1600;
+  const scale = Math.min(1, maxSide / Math.max(img.naturalWidth, img.naturalHeight));
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(img.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(img.naturalHeight * scale));
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL('image/jpeg', 0.88);
+}
+
+async function recognizeVinWithLlm(file, onStatus) {
+  const config = getLlmConfig();
+  if (!config.endpoint || !config.model || !config.apiKey) return null;
+
+  onStatus?.('调用大模型识别 VIN...', 20);
+  const imageUrl = await prepareLlmImageDataUrl(file);
+  const response = await fetch(config.endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      temperature: 0,
+      max_tokens: 80,
+      messages: [
+        {
+          role: 'system',
+          content: '你是车辆VIN识别助手。只识别图片中的17位车辆识别代码/VIN/车架号。不要解释，不要猜测无关内容。',
+        },
+        {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: '请从图片中读取车辆VIN。仅输出最可能的17位VIN；如果看不清，输出你能看到的候选字符，不要输出其它说明。',
+            },
+            {
+              type: 'image_url',
+              image_url: { url: imageUrl, detail: 'high' },
+            },
+          ],
+        },
+      ],
+    }),
+  });
+
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(`大模型接口返回 ${response.status}: ${message.slice(0, 120)}`);
+  }
+
+  const data = await response.json();
+  const content = data?.choices?.[0]?.message?.content || '';
+  const vin = extractVIN(content);
+  return { vin, rawText: content, source: '大模型' };
+}
+
+async function recognizeVinWithTesseract(file, onStatus) {
+  const worker = await createVinOcrWorker(m => {
+    if (m.status === 'recognizing text') {
+      onStatus?.(`本地OCR识别 ${Math.round(m.progress * 100)}%`, 65 + Math.round(m.progress * 30));
+    } else if (m.status === 'loading language traineddata') {
+      onStatus?.('加载本地OCR模型...', 35);
+    } else if (m.status === 'initializing api') {
+      onStatus?.('初始化本地OCR引擎...', 50);
+    }
+  });
+
+  try {
+    const modes = ['auto', 'highContrast', 'none', 'invert'];
+    const rawTexts = [];
+    for (const mode of modes) {
+      onStatus?.(`本地OCR多轮识别：${mode}`, 55);
+      const image = await prepareVinImage(file, mode);
+      const result = await worker.recognize(image);
+      rawTexts.push(`[${mode}]\n${result.data.text}`);
+      const vin = extractVIN(rawTexts.join('\n'));
+      if (vin && hasValidVinCheckDigit(vin)) {
+        return { vin, rawText: rawTexts.join('\n\n'), source: '本地OCR' };
+      }
+    }
+
+    return {
+      vin: extractVIN(rawTexts.join('\n')),
+      rawText: rawTexts.join('\n\n'),
+      source: '本地OCR',
+    };
+  } finally {
+    await worker.terminate();
+  }
+}
+
+async function recognizeVinFromFile(file, onStatus) {
+  const llmConfig = getLlmConfig();
+  if (llmConfig.endpoint && llmConfig.model && llmConfig.apiKey) {
+    try {
+      const llmResult = await recognizeVinWithLlm(file, onStatus);
+      if (llmResult?.vin) return llmResult;
+      onStatus?.('大模型未返回标准VIN，切换本地OCR...', 35);
+    } catch (err) {
+      console.warn('LLM OCR failed:', err);
+      onStatus?.('大模型识别失败，切换本地OCR...', 35);
+    }
+  }
+
+  return recognizeVinWithTesseract(file, onStatus);
 }
 
 async function runOCR() {
@@ -2846,28 +3102,16 @@ async function runOCR() {
   rawEl.innerHTML = '<span style="color:var(--gray-400)">正在分析图像...</span>';
 
   try {
-    const worker = await createVinOcrWorker(m => {
-      if (m.status === 'recognizing text') {
-        const pct = Math.round(m.progress * 100);
-        progressBar.style.width = pct + '%';
-        progressLabel.textContent = `识别进度 ${pct}%`;
-      } else if (m.status === 'loading language traineddata') {
-        progressLabel.textContent = '加载VIN识别模型...';
-        progressBar.style.width = '30%';
-      } else if (m.status === 'initializing api') {
-        progressLabel.textContent = '初始化OCR引擎...';
-        progressBar.style.width = '60%';
-      }
+    const result = await recognizeVinFromFile(file, (message, pct) => {
+      progressLabel.textContent = message;
+      if (typeof pct === 'number') progressBar.style.width = Math.max(0, Math.min(100, pct)) + '%';
     });
-    const image = await prepareVinImage(file);
-    const result = await worker.recognize(image);
-    await worker.terminate();
 
-    const rawText = result.data.text;
-    const vin = extractVIN(rawText);
+    const rawText = result.rawText || '';
+    const vin = result.vin;
 
     rawEl.innerHTML = rawText
-      ? `<pre style="white-space:pre-wrap;font-size:12px;">${escapeHtml(rawText.substring(0, 500))}</pre>`
+      ? `<div style="margin-bottom:6px;color:var(--gray-500);font-size:12px;">识别来源：${escapeHtml(result.source)}</div><pre style="white-space:pre-wrap;font-size:12px;">${escapeHtml(rawText.substring(0, 800))}</pre>`
       : '<span style="color:var(--gray-400)">未识别到文字</span>';
 
     if (vin) {
@@ -2907,6 +3151,15 @@ async function runOCR() {
 // 标准VIN码提取（17位，符合ISO 3779）
 function extractVIN(text) {
   const source = normalizeVinText(text);
+  const candidates = collectVinCandidates(source);
+  const valid = candidates.filter(isVinCandidate);
+  if (valid.length === 0) return null;
+
+  valid.sort((a, b) => scoreVinCandidate(b) - scoreVinCandidate(a));
+  return valid[0];
+}
+
+function collectVinCandidates(source) {
   const candidates = [];
   const labelMatch = source.match(/(?:VIN|V1N|车辆识别(?:代号|代码)?|车架号)\s*[:：]?\s*([A-Z0-9\s-]{17,40})/);
 
@@ -2922,7 +3175,7 @@ function extractVIN(text) {
     candidates.push(compact.slice(i, i + 17));
   }
 
-  return candidates.find(isVinCandidate) || null;
+  return [...new Set(candidates)];
 }
 
 function normalizeVinText(text) {
@@ -2937,6 +3190,38 @@ function normalizeVinText(text) {
 
 function isVinCandidate(value) {
   return /^[A-HJ-NPR-Z0-9]{17}$/.test(value) && !/^([A-Z0-9])\1{16}$/.test(value);
+}
+
+function scoreVinCandidate(value) {
+  let score = 0;
+  if (hasValidVinCheckDigit(value)) score += 100;
+  if (/^[L1][A-Z0-9]{2}/.test(value)) score += 10;
+  if (/[A-Z]/.test(value) && /\d/.test(value)) score += 10;
+  if (!/[IOQ]/.test(value)) score += 5;
+  return score;
+}
+
+function hasValidVinCheckDigit(vin) {
+  if (!isVinCandidate(vin)) return false;
+
+  const values = {
+    A: 1, B: 2, C: 3, D: 4, E: 5, F: 6, G: 7, H: 8,
+    J: 1, K: 2, L: 3, M: 4, N: 5, P: 7, R: 9,
+    S: 2, T: 3, U: 4, V: 5, W: 6, X: 7, Y: 8, Z: 9,
+    0: 0, 1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 7, 8: 8, 9: 9,
+  };
+  const weights = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2];
+  let sum = 0;
+
+  for (let i = 0; i < vin.length; i++) {
+    const value = values[vin[i]];
+    if (typeof value !== 'number') return false;
+    sum += value * weights[i];
+  }
+
+  const remainder = sum % 11;
+  const expected = remainder === 10 ? 'X' : String(remainder);
+  return vin[8] === expected;
 }
 
 function extractCandidates(text) {
@@ -3341,6 +3626,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   renderDirStatus();
   updateStep();
   updateButtons();
+  initLlmSettings();
+  ['llmEndpoint', 'llmModel', 'llmApiKey'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', updateLlmStatus);
+  });
 
   // 自动恢复上次的归档目录
   const savedHandle = await loadDirHandle('archiveRoot');
