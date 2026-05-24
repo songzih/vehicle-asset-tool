@@ -1403,7 +1403,7 @@
             <div class="llm-settings-body">
               <label class="llm-row">
                 <span>接口地址</span>
-                <input id="llmEndpoint" placeholder="https://api.openai.com/v1/chat/completions">
+                <input id="llmEndpoint" placeholder="/api/vin-ocr">
               </label>
               <label class="llm-row">
                 <span>模型</span>
@@ -1411,7 +1411,7 @@
               </label>
               <label class="llm-row">
                 <span>API Key</span>
-                <input id="llmApiKey" type="password" placeholder="仅保存在当前浏览器本地">
+                <input id="llmApiKey" type="password" placeholder="使用本站后端接口时无需填写">
               </label>
               <div class="llm-actions">
                 <button class="btn btn-ghost" type="button" onclick="saveLlmConfig()">保存设置</button>
@@ -1419,7 +1419,7 @@
                 <span class="llm-tip" id="llmStatus">未配置时自动使用本地OCR</span>
               </div>
               <div class="llm-tip">
-                需使用支持图片输入且允许浏览器跨域调用的 OpenAI 兼容接口。GitHub Pages 不能安全直连官方 API，建议填写自己的后端中转接口。
+                默认调用本站后端中转接口。请在 Netlify 环境变量中配置 OPENAI_API_KEY。
               </div>
             </div>
           </details>
@@ -2862,8 +2862,13 @@ function saveLlmConfig() {
     apiKey: document.getElementById('llmApiKey').value.trim(),
   };
 
-  if (!config.endpoint || !config.model || !config.apiKey) {
-    showToast('配置不完整', '请填写接口地址、模型和 API Key', 'warning');
+  if (!config.endpoint || !config.model) {
+    showToast('配置不完整', '请填写接口地址和模型', 'warning');
+    return;
+  }
+
+  if (!isBackendLlmEndpoint(config.endpoint) && !config.apiKey) {
+    showToast('配置不完整', '直连第三方接口时需要填写 API Key', 'warning');
     return;
   }
 
@@ -2888,8 +2893,8 @@ function initLlmSettings() {
   const modelEl = document.getElementById('llmModel');
   const apiKeyEl = document.getElementById('llmApiKey');
 
-  if (endpointEl && !endpointEl.value) endpointEl.value = saved.endpoint || 'https://api.openai.com/v1/chat/completions';
-  if (modelEl && !modelEl.value) modelEl.value = saved.model || 'gpt-4o-mini';
+  if (endpointEl && !endpointEl.value) endpointEl.value = saved.endpoint || '/api/vin-ocr';
+  if (modelEl && !modelEl.value) modelEl.value = saved.model || 'gpt-4.1';
   if (apiKeyEl && !apiKeyEl.value) apiKeyEl.value = saved.apiKey || '';
   updateLlmStatus();
 }
@@ -2898,8 +2903,13 @@ function updateLlmStatus() {
   const status = document.getElementById('llmStatus');
   if (!status) return;
   const config = getLlmConfig();
-  if (!config.endpoint || !config.model || !config.apiKey) {
+  if (!config.endpoint || !config.model) {
     status.textContent = '未配置时自动使用本地OCR';
+    return;
+  }
+
+  if (isBackendLlmEndpoint(config.endpoint)) {
+    status.textContent = `已配置本站后端中转：${config.model}`;
     return;
   }
 
@@ -2907,7 +2917,20 @@ function updateLlmStatus() {
     || `已配置：${config.model}，将优先使用大模型`;
 }
 
+function isBackendLlmEndpoint(endpoint) {
+  if (!endpoint) return false;
+  if (endpoint.startsWith('/')) return true;
+  try {
+    const url = new URL(endpoint, window.location.origin);
+    return url.origin === window.location.origin && url.pathname.includes('/api/vin-ocr');
+  } catch (e) {
+    return false;
+  }
+}
+
 function getLlmEndpointWarning(endpoint) {
+  if (isBackendLlmEndpoint(endpoint)) return '';
+
   try {
     const url = new URL(endpoint);
     if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
@@ -3007,7 +3030,7 @@ async function prepareLlmImageDataUrl(file) {
 
 async function recognizeVinWithLlm(file, onStatus) {
   const config = getLlmConfig();
-  if (!config.endpoint || !config.model || !config.apiKey) return null;
+  if (!config.endpoint || !config.model) return null;
 
   const endpointWarning = getLlmEndpointWarning(config.endpoint);
   if (endpointWarning) {
@@ -3016,15 +3039,19 @@ async function recognizeVinWithLlm(file, onStatus) {
 
   onStatus?.('调用大模型识别 VIN...', 20);
   const imageUrl = await prepareLlmImageDataUrl(file);
+  const useBackend = isBackendLlmEndpoint(config.endpoint);
   let response;
   try {
     response = await fetch(config.endpoint, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        Authorization: `Bearer ${config.apiKey}`,
+        ...(useBackend ? {} : { Authorization: `Bearer ${config.apiKey}` }),
       },
-      body: JSON.stringify({
+      body: JSON.stringify(useBackend ? {
+        model: config.model,
+        image: imageUrl,
+      } : {
         model: config.model,
         temperature: 0,
         max_tokens: 80,
@@ -3059,9 +3086,9 @@ async function recognizeVinWithLlm(file, onStatus) {
   }
 
   const data = await response.json();
-  const content = data?.choices?.[0]?.message?.content || '';
-  const vin = extractVIN(content);
-  return { vin, rawText: content, source: '大模型' };
+  const content = data?.rawText || data?.choices?.[0]?.message?.content || '';
+  const vin = data?.vin || extractVIN(content);
+  return { vin, rawText: content, source: useBackend ? '后端大模型' : '大模型' };
 }
 
 async function recognizeVinWithTesseract(file, onStatus) {
@@ -3101,7 +3128,8 @@ async function recognizeVinWithTesseract(file, onStatus) {
 
 async function recognizeVinFromFile(file, onStatus) {
   const llmConfig = getLlmConfig();
-  if (llmConfig.endpoint && llmConfig.model && llmConfig.apiKey) {
+  const canUseLlm = llmConfig.endpoint && llmConfig.model && (isBackendLlmEndpoint(llmConfig.endpoint) || llmConfig.apiKey);
+  if (canUseLlm) {
     try {
       const llmResult = await recognizeVinWithLlm(file, onStatus);
       if (llmResult?.vin) return llmResult;

@@ -23,6 +23,21 @@ python -m http.server 5173
 
 将 `index.html`、`车辆资产盘点工具.html` 和 `README.md` 推送到 GitHub Pages 仓库即可。
 
+如果需要使用大模型 VIN 识别，请部署到 Netlify，并在站点环境变量中配置：
+
+```text
+OPENAI_API_KEY=你的 OpenAI API Key
+OPENAI_VISION_MODEL=gpt-4.1
+```
+
+后端中转接口为：
+
+```text
+/api/vin-ocr
+```
+
+GitHub Pages 只能托管静态文件，不能运行 `netlify/functions` 中的后端中转接口。
+
 ## 部署
 
 把 `index.html`、`styles.css`、`app.js` 推送到 GitHub Pages 对应仓库即可。
