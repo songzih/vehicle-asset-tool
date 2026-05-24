@@ -1368,9 +1368,9 @@
     <div class="card-body">
       <div class="ocr-section">
         <div class="ocr-result-box">
-          <div class="label">🤖 OCR 识别结果（原始文字）</div>
+          <div class="label">🤖 OCR 识别状态</div>
           <div class="ocr-raw-text" id="ocrRawText">
-            <span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮...</span>
+            <span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮，结果将自动填入右侧输入框。</span>
           </div>
           <div class="ocr-progress" id="ocrProgress">
             <div class="progress-label" id="ocrProgressLabel">正在识别...</div>
@@ -3110,25 +3110,21 @@ async function runOCR() {
     const rawText = result.rawText || '';
     const vin = result.vin;
 
-    rawEl.innerHTML = rawText
-      ? `<div style="margin-bottom:6px;color:var(--gray-500);font-size:12px;">识别来源：${escapeHtml(result.source)}</div><pre style="white-space:pre-wrap;font-size:12px;">${escapeHtml(rawText.substring(0, 800))}</pre>`
-      : '<span style="color:var(--gray-400)">未识别到文字</span>';
-
     if (vin) {
       document.getElementById('vinInput').value = vin;
       state.vin = vin;
       validateVin();
+      rawEl.innerHTML = `<span style="color:var(--success);font-weight:600">识别成功，已自动填入车架号（${escapeHtml(result.source)}）</span>`;
       showToast('识别成功', `已自动提取车架号：${vin}`, 'success');
     } else {
       // 尝试提取最长的字母数字串作为候选
       const candidates = extractCandidates(rawText);
       if (candidates.length > 0) {
         document.getElementById('vinInput').value = candidates[0];
-        rawEl.innerHTML += `<div style="margin-top:8px;padding:8px;background:#fef9c3;border-radius:6px;font-size:12px;">
-          🔍 候选车架号（请人工确认）：<b>${candidates.join(' | ')}</b>
-        </div>`;
+        rawEl.innerHTML = '<span style="color:var(--warning);font-weight:600">已填入候选车架号，请人工核对。</span>';
         showToast('请人工确认', '已提取候选编号，请核对后确认', 'warning');
       } else {
+        rawEl.innerHTML = '<span style="color:var(--warning);font-weight:600">未识别到标准车架号，请手动输入。</span>';
         showToast('识别提示', '未自动识别到标准车架号，请手动输入', 'warning');
       }
     }
@@ -3508,7 +3504,7 @@ function clearAll() {
   document.getElementById('vinInput').value = '';
   document.getElementById('vinInput').className = 'vin-input';
   document.getElementById('vinHint').textContent = '车架号通常为 17 位字母+数字';
-  document.getElementById('ocrRawText').innerHTML = '<span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮...</span>';
+  document.getElementById('ocrRawText').innerHTML = '<span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮，结果将自动填入右侧输入框。</span>';
   document.getElementById('ocrBtn').textContent = '🔍 OCR 识别车架号';
 
   // 文件夹状态：目录未设置时重置为待定，已设置时保持绿色
@@ -3536,7 +3532,7 @@ function clearPhotosOnly() {
   document.getElementById('vinInput').value = '';
   document.getElementById('vinInput').className = 'vin-input';
   document.getElementById('vinHint').textContent = '车架号通常为 17 位字母+数字';
-  document.getElementById('ocrRawText').innerHTML = '<span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮...</span>';
+  document.getElementById('ocrRawText').innerHTML = '<span style="color:var(--gray-400)">上传车架号照片后，点击「OCR识别」按钮，结果将自动填入右侧输入框。</span>';
   document.getElementById('ocrBtn').textContent = '🔍 OCR 识别车架号';
   updateButtons();
 
