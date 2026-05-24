@@ -1419,7 +1419,7 @@
                 <span class="llm-tip" id="llmStatus">未配置时自动使用本地OCR</span>
               </div>
               <div class="llm-tip">
-                需使用支持图片输入且允许浏览器跨域调用的 OpenAI 兼容接口。不要在公共电脑保存 API Key。
+                需使用支持图片输入且允许浏览器跨域调用的 OpenAI 兼容接口。GitHub Pages 不能安全直连官方 API，建议填写自己的后端中转接口。
               </div>
             </div>
           </details>
@@ -2898,9 +2898,32 @@ function updateLlmStatus() {
   const status = document.getElementById('llmStatus');
   if (!status) return;
   const config = getLlmConfig();
-  status.textContent = config.endpoint && config.model && config.apiKey
-    ? `已配置：${config.model}，将优先使用大模型`
-    : '未配置时自动使用本地OCR';
+  if (!config.endpoint || !config.model || !config.apiKey) {
+    status.textContent = '未配置时自动使用本地OCR';
+    return;
+  }
+
+  status.textContent = getLlmEndpointWarning(config.endpoint)
+    || `已配置：${config.model}，将优先使用大模型`;
+}
+
+function getLlmEndpointWarning(endpoint) {
+  try {
+    const url = new URL(endpoint);
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') {
+      if (url.port === '7890') {
+        return '当前端口 7890 通常是网络代理，不是大模型API服务，请改用后端中转接口';
+      }
+      return '本地接口必须提供 /v1/chat/completions 且允许浏览器跨域调用';
+    }
+
+    if (url.hostname === 'api.openai.com') {
+      return '官方 API 不建议从静态网页直连，可能因 CORS 或密钥安全限制失败，请使用后端中转接口';
+    }
+  } catch (e) {
+    return '接口地址格式不正确';
+  }
+  return '';
 }
 
 async function createVinOcrWorker(logger) {
@@ -2986,39 +3009,49 @@ async function recognizeVinWithLlm(file, onStatus) {
   const config = getLlmConfig();
   if (!config.endpoint || !config.model || !config.apiKey) return null;
 
+  const endpointWarning = getLlmEndpointWarning(config.endpoint);
+  if (endpointWarning) {
+    throw new Error(endpointWarning);
+  }
+
   onStatus?.('调用大模型识别 VIN...', 20);
   const imageUrl = await prepareLlmImageDataUrl(file);
-  const response = await fetch(config.endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${config.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: config.model,
-      temperature: 0,
-      max_tokens: 80,
-      messages: [
-        {
-          role: 'system',
-          content: '你是车辆VIN识别助手。只识别图片中的17位车辆识别代码/VIN/车架号。不要解释，不要猜测无关内容。',
-        },
-        {
-          role: 'user',
-          content: [
-            {
-              type: 'text',
-              text: '请从图片中读取车辆VIN。仅输出最可能的17位VIN；如果看不清，输出你能看到的候选字符，不要输出其它说明。',
-            },
-            {
-              type: 'image_url',
-              image_url: { url: imageUrl, detail: 'high' },
-            },
-          ],
-        },
-      ],
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(config.endpoint, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${config.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: config.model,
+        temperature: 0,
+        max_tokens: 80,
+        messages: [
+          {
+            role: 'system',
+            content: '你是车辆VIN识别助手。只识别图片中的17位车辆识别代码/VIN/车架号。不要解释，不要猜测无关内容。',
+          },
+          {
+            role: 'user',
+            content: [
+              {
+                type: 'text',
+                text: '请从图片中读取车辆VIN。仅输出最可能的17位VIN；如果看不清，输出你能看到的候选字符，不要输出其它说明。',
+              },
+              {
+                type: 'image_url',
+                image_url: { url: imageUrl, detail: 'high' },
+              },
+            ],
+          },
+        ],
+      }),
+    });
+  } catch (err) {
+    throw new Error(`无法连接大模型接口：${err.message || '可能是 CORS、网络代理或接口地址错误'}`);
+  }
 
   if (!response.ok) {
     const message = await response.text();
@@ -3075,7 +3108,8 @@ async function recognizeVinFromFile(file, onStatus) {
       onStatus?.('大模型未返回标准VIN，切换本地OCR...', 35);
     } catch (err) {
       console.warn('LLM OCR failed:', err);
-      onStatus?.('大模型识别失败，切换本地OCR...', 35);
+      onStatus?.(`大模型识别失败：${err.message}，切换本地OCR...`, 35);
+      showToast('大模型识别失败', err.message, 'warning');
     }
   }
 
